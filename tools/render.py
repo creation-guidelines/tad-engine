@@ -104,15 +104,17 @@ def fmt(v):
 
 
 def relations_for(rid):
+    """Kramdown definition-list lines: one ": " line per relation, all under one "Relations" term -
+    see render_table_page's docstring note for why definition lists instead of bold labels."""
     lines = []
     for rt in relation_tables:
         has_note = "note" in table_cols[rt]
         note_sql = "note" if has_note else "NULL"
         for to_id, rel, note in q(f"SELECT to_id, relation, {note_sql} FROM {rt} WHERE from_id = ? ORDER BY rowid", rid):
-            lines.append(f"- \u2192 **{rel}** {link(to_id)}" + (f" \u2014 {note}" if note else ""))
+            lines.append(f": \u2192 {rel}: {link(to_id)}" + (f" \u2014 {note}" if note else ""))
         for from_id, rel, note in q(f"SELECT from_id, relation, {note_sql} FROM {rt} WHERE to_id = ? ORDER BY rowid", rid):
-            lines.append(f"- \u2190 **{rel}** {link(from_id)}" + (f" \u2014 {note}" if note else ""))
-    return (["", "**Relations:**", ""] + lines) if lines else []
+            lines.append(f": \u2190 {rel}: {link(from_id)}" + (f" \u2014 {note}" if note else ""))
+    return (["Relations"] + lines + [""]) if lines else []
 
 
 def cited_by_row(rid):
@@ -121,7 +123,7 @@ def cited_by_row(rid):
         srcs = q(f"SELECT s.title, s.url FROM {t} c JOIN {src} s ON s.id = c.{source_col} "
                  f"WHERE c.{cited_col} = ? ORDER BY s.rowid", rid)
         if srcs:
-            lines.append("**Sources:** " + ", ".join(f"[{title}]({url})" for title, url in srcs))
+            lines += ["Sources", ": " + ", ".join(f"[{title}]({url})" for title, url in srcs), ""]
     return lines
 
 
@@ -134,6 +136,10 @@ def cites_of_source(source_id):
 
 
 def render_table_page(t):
+    """Each field is a kramdown definition list (Term / : Definition) instead of a bold-labeled
+    line - GitHub Pages' default markdown engine (kramdown) renders that as <dl><dt><dd>, which
+    reads as plain indented text with no bold and no font-size jump, closer to an RFC's minimal
+    style, while still keeping every value's own markdown (links, etc.) processed normally."""
     c = table_cols[t]
     label_col = "name" if "name" in c else ("title" if "title" in c else ("id" if "id" in c else None))
     lines = [f"# {t.replace('_', ' ').title()}", ""]
@@ -149,18 +155,17 @@ def render_table_page(t):
                 continue
             val = fmt(rec[col])
             if val:
-                lines.append(f"**{col.replace('_', ' ').capitalize()}:** {val}")
+                lines.append(col.replace('_', ' ').capitalize())
+                lines.append(f": {val}")
                 lines.append("")
         if rid is not None:
             rel = relations_for(rid)
             cite = cited_by_row(rid)
-            if rel and cite:
-                rel.append("")
             lines += rel + cite
             if t in sources_tables:
                 cby = list(dict.fromkeys(cites_of_source(rid)))
                 if cby:
-                    lines.append("**Cited by:** " + ", ".join(cby))
+                    lines += ["Cited by", ": " + ", ".join(cby), ""]
         lines.append("")
     return lines
 
