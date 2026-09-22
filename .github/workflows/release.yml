@@ -16,14 +16,15 @@ jobs:
       - name: Tag dist at the same version
         # dist mirrors engine/ (see dist.yml) and is already current by the time a release lands,
         # since release-please can only bump a version from a feat/fix commit already on main, and
-        # that same push re-synced dist. Tagging dist's current tip under the release's own tag
-        # gives consumers a pinned, engine-only ref to subrepo-clone/pull instead of the moving
-        # `dist` branch - two `gh api` calls, no checkout needed.
+        # that same push re-synced dist. Tagging dist's current tip gives consumers a pinned,
+        # engine-only ref to subrepo-clone/pull instead of the moving `dist` branch - two `gh api`
+        # calls, no checkout needed. Namespaced as dist/vX.Y.Z, NOT the bare vX.Y.Z release-please
+        # already tagged on main (a plain create-ref there 409s: "Reference already exists").
         if: ${{ steps.release.outputs.release_created }}
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.release.outputs.tag_name }}
         run: |
           sha=$(gh api "repos/${{ github.repository }}/git/refs/heads/dist" --jq .object.sha)
-          gh api "repos/${{ github.repository }}/git/refs" -f ref="refs/tags/$TAG" -f sha="$sha"
-          echo "Tagged dist@$sha as $TAG"
+          gh api "repos/${{ github.repository }}/git/refs" -f ref="refs/tags/dist/$TAG" -f sha="$sha"
+          echo "Tagged dist@$sha as dist/$TAG"
