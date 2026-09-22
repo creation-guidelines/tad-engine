@@ -37,13 +37,22 @@ repo just generated from text-as-data-template) or an existing `git subtree`:
 ```bash
 git rm -r .tad
 git commit -m "chore(tad): remove vendored copy before adopting as a git subrepo"
-git subrepo clone https://github.com/creation-guidelines/tad-engine.git .tad -b dist
+git subrepo clone https://github.com/creation-guidelines/tad-engine.git .tad -b dist \
+  -m "chore(tad): vendor engine via git subrepo"
 ```
 
 **From then on, to pull engine updates:**
 ```bash
-git subrepo pull .tad
+git subrepo pull .tad -m "chore(tad): pull engine update"
 ```
+**Always pass `-m` with a Conventional Commits message.** `git subrepo` accepts `-m`/`--message` on
+`clone`/`pull`/`push` and, verified directly, it fully replaces the tool's own auto-generated
+message (which otherwise looks like `git subrepo pull .tad` with no type prefix) - nothing about
+this is hardcoded, we just weren't using the flag at first. `.gitrepo`, not the commit message,
+is what `git subrepo` reads to track state, so a custom message never breaks future pulls. Because
+of this, consuming repos should **not** need a commitlint `ignores` rule for subrepo's own commits
+at all - if commitlint flags a subrepo commit, that means `-m` was forgotten, and the right fix is
+to amend the message, not to add an exemption.
 This only stays conflict-free if nothing in `.tad/` was hand-edited downstream (subrepo tracks the
 pinned commit in `.tad/.gitrepo` - a plain, readable file, not something buried in commit message
 trailers). If your repo needs different engine behavior, change it here and pull the update, rather
