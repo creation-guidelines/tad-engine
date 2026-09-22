@@ -71,11 +71,17 @@ still needs an entry for `git-subrepo`'s messages (`^git subrepo (clone|pull|pus
 [`.github/workflows/dist.yml`](../.github/workflows/dist.yml)) - it exists so your `.tad/` gets only
 the engine payload, not this repo's own CI/commit-lint/release files.
 
-There is currently no way to pin to a specific released version: both `git subtree` and
-`git subrepo` import the tree at whatever ref you give them, and only `dist` (not a tag on `main`)
-gives a clean `engine/`-only tree, and `dist` itself has no tags of its own yet. For now, `dist` (a
-moving target, tracking whatever last merged to `main`) is the only supported source. If pinned
-versions turn out to matter, the fix is to also tag `dist` at each release.
+To pin to a specific released version instead of the moving `dist`, use the release's own tag as
+the `<ref>` - it points at the same commit `dist` was at when that version was released, so it is
+already `engine/`-only, not `main`'s full tree:
+```bash
+git subrepo clone https://github.com/creation-guidelines/tad-engine.git .tad -b v1.0.2 \
+  -m "chore(tad): vendor engine via git subrepo (v1.0.2)"
+```
+The release workflow tags `dist`, not `main`, at every version - `main`'s own tags (also cut by
+release-please) point at commits containing this repo's own governance files, which is exactly
+what `dist` exists to avoid, so use the tag against this repo the same way you'd use `dist`, never
+against `main` directly.
 
 ## Releases
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/) and are linted on
