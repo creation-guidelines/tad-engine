@@ -71,17 +71,18 @@ still needs an entry for `git-subrepo`'s messages (`^git subrepo (clone|pull|pus
 [`.github/workflows/dist.yml`](../.github/workflows/dist.yml)) - it exists so your `.tad/` gets only
 the engine payload, not this repo's own CI/commit-lint/release files.
 
-To pin to a specific released version instead of the moving `dist`, use the release's own tag as
-the `<ref>` - it points at the same commit `dist` was at when that version was released, so it is
-already `engine/`-only, not `main`'s full tree:
+To pin to a specific released version instead of the moving `dist`, use `dist/vX.Y.Z` as the
+`<ref>` - it points at the same commit `dist` was at when that version was released, so it is
+already `engine/`-only:
 ```bash
-git subrepo clone https://github.com/creation-guidelines/tad-engine.git .tad -b v1.0.2 \
+git subrepo clone https://github.com/creation-guidelines/tad-engine.git .tad -b dist/v1.0.2 \
   -m "chore(tad): vendor engine via git subrepo (v1.0.2)"
 ```
-The release workflow tags `dist`, not `main`, at every version - `main`'s own tags (also cut by
-release-please) point at commits containing this repo's own governance files, which is exactly
-what `dist` exists to avoid, so use the tag against this repo the same way you'd use `dist`, never
-against `main` directly.
+This is **not** the same tag as the plain `v1.0.2` release-please cuts on `main` - that one's tree
+contains this repo's own governance files (`commitlint.config.js`, `CHANGELOG.md`, ...), exactly
+what `dist` exists to avoid, and a same-named tag on `dist` would collide with it (`git`'s tag
+namespace is repo-wide, not per-branch). `dist/vX.Y.Z` is a distinct, namespaced tag created right
+after each release, pointing at `dist`'s tip at that moment.
 
 ## Releases
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/) and are linted on
