@@ -28,20 +28,28 @@ repo just generated from text-as-data-template):
 ```bash
 git rm -r .tad
 git commit -m "chore(tad): remove vendored copy before adopting as a git subtree"
-git subtree add --prefix=.tad https://github.com/creation-guidelines/tad-engine.git main --squash
+git subtree add --prefix=.tad https://github.com/creation-guidelines/tad-engine.git dist --squash
 ```
 
 **From then on, to pull engine updates:**
 ```bash
-git subtree pull --prefix=.tad https://github.com/creation-guidelines/tad-engine.git main --squash
+git subtree pull --prefix=.tad https://github.com/creation-guidelines/tad-engine.git dist --squash
 ```
 This only stays conflict-free if nothing in `.tad/` was hand-edited downstream. If your repo needs
 different engine behavior, change it here and pull the update, rather than patching the vendored
 copy in place - a local patch to a vendored file is exactly what turns the next pull into a merge
 conflict.
 
-To pin to a specific released version instead of a moving `main`, use a tag as the `<ref>`:
-`git subtree pull --prefix=.tad https://github.com/creation-guidelines/tad-engine.git v1.2.0 --squash`.
+`dist` is a mirror of this repo's `engine/` folder alone (kept in sync by
+[`.github/workflows/dist.yml`](../.github/workflows/dist.yml)) - it exists so your `.tad/` gets only
+the engine payload, not this repo's own CI/commit-lint/release files.
+
+There is currently no way to pin to a specific released version: `git subtree` always imports the
+*entire* tree at the ref you give it, so pointing at a tag on `main` (which also contains this
+repo's governance files) would reintroduce the clutter `dist` exists to avoid, and `dist` itself
+has no tags of its own yet. For now, `dist` (a moving target, tracking whatever last merged to
+`main`) is the only supported source. If pinned versions turn out to matter, the fix is to also tag
+`dist` at each release, not to point at a tag on `main`.
 
 ## Releases
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/) and are linted on
