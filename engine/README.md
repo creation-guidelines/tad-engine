@@ -6,9 +6,12 @@ a schema-agnostic Markdown renderer. It knows nothing about your schema, table n
 matter - it's the plumbing, not the content.
 
 This is the engine extracted from [creation-guidelines/text-as-data-template](https://github.com/creation-guidelines/text-as-data-template).
-Consuming repos vendor it as a `git subtree` at `.tad/`, so engine fixes and features can flow into
-them with a normal `git subtree pull` - not a manual re-copy - as long as `.tad/` is never
-hand-edited downstream (see "For consuming repos" below).
+Consuming repos vendor it as a [`git subrepo`](https://github.com/ingydotnet/git-subrepo) at
+`.tad/`, so engine fixes and features can flow into them with a normal `git subrepo pull` - not a
+manual re-copy - as long as `.tad/` is never hand-edited downstream (see "For consuming repos"
+below). `git-subrepo` is a third-party git extension (not bundled with git itself); it is only
+needed by whoever runs the sync commands below, never by CI or by someone just cloning and reading
+the repo - the vendored files are plain committed files either way.
 
 ## What's here
 | Path | What |
@@ -23,33 +26,47 @@ row order matters) is documented in the consuming template's `AGENTS.md`, not du
 
 ## For consuming repos
 
+Install `git-subrepo` once (it adds a `git subrepo` subcommand; nothing else is affected):
+```bash
+git clone https://github.com/ingydotnet/git-subrepo /path/to/git-subrepo
+echo 'source /path/to/git-subrepo/.rc' >> ~/.bashrc   # or add /path/to/git-subrepo/lib to PATH
+```
+
 **One-time, when first adopting this into a repo whose `.tad/` is currently a plain copy** (e.g. a
-repo just generated from text-as-data-template):
+repo just generated from text-as-data-template) or an existing `git subtree`:
 ```bash
 git rm -r .tad
-git commit -m "chore(tad): remove vendored copy before adopting as a git subtree"
-git subtree add --prefix=.tad https://github.com/creation-guidelines/tad-engine.git dist --squash
+git commit -m "chore(tad): remove vendored copy before adopting as a git subrepo"
+git subrepo clone https://github.com/creation-guidelines/tad-engine.git .tad -b dist
 ```
 
 **From then on, to pull engine updates:**
 ```bash
-git subtree pull --prefix=.tad https://github.com/creation-guidelines/tad-engine.git dist --squash
+git subrepo pull .tad
 ```
-This only stays conflict-free if nothing in `.tad/` was hand-edited downstream. If your repo needs
-different engine behavior, change it here and pull the update, rather than patching the vendored
-copy in place - a local patch to a vendored file is exactly what turns the next pull into a merge
-conflict.
+This only stays conflict-free if nothing in `.tad/` was hand-edited downstream (subrepo tracks the
+pinned commit in `.tad/.gitrepo` - a plain, readable file, not something buried in commit message
+trailers). If your repo needs different engine behavior, change it here and pull the update, rather
+than patching the vendored copy in place - a local patch to a vendored file is exactly what turns
+the next pull into a merge conflict.
+
+We moved here from `git subtree` after testing both against this exact setup: `git subrepo` writes
+one commit per sync instead of subtree's two (a squash commit plus a merge commit), and its
+`.gitrepo` file states the tracked remote, branch and pinned commit explicitly instead of relying
+on `git log` to find a squash commit's trailer. Neither tool's own auto-generated commit messages
+follow Conventional Commits, and that isn't fixable by switching tools - it's inherent to any
+sync command that writes its own commit message - so `commitlint.config.js`'s `ignores` list
+still needs an entry for `git-subrepo`'s messages (`^git subrepo (clone|pull|push)`).
 
 `dist` is a mirror of this repo's `engine/` folder alone (kept in sync by
 [`.github/workflows/dist.yml`](../.github/workflows/dist.yml)) - it exists so your `.tad/` gets only
 the engine payload, not this repo's own CI/commit-lint/release files.
 
-There is currently no way to pin to a specific released version: `git subtree` always imports the
-*entire* tree at the ref you give it, so pointing at a tag on `main` (which also contains this
-repo's governance files) would reintroduce the clutter `dist` exists to avoid, and `dist` itself
-has no tags of its own yet. For now, `dist` (a moving target, tracking whatever last merged to
-`main`) is the only supported source. If pinned versions turn out to matter, the fix is to also tag
-`dist` at each release, not to point at a tag on `main`.
+There is currently no way to pin to a specific released version: both `git subtree` and
+`git subrepo` import the tree at whatever ref you give them, and only `dist` (not a tag on `main`)
+gives a clean `engine/`-only tree, and `dist` itself has no tags of its own yet. For now, `dist` (a
+moving target, tracking whatever last merged to `main`) is the only supported source. If pinned
+versions turn out to matter, the fix is to also tag `dist` at each release.
 
 ## Releases
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/) and are linted on
