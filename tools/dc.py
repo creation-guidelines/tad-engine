@@ -41,6 +41,12 @@ def check(d):
     for table, path in sorted(tables_from_load_sql(d).items()):
         cols = {r[0] for r in con.execute(
             "SELECT column_name FROM information_schema.columns WHERE table_name = ?", [table]).fetchall()}
+        blob_cols = {r[0] for r in con.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name = ? AND data_type = 'BLOB'", [table]).fetchall()}
+        for c in sorted(blob_cols):
+            problems.append(f"{table}: column '{c}' is BLOB - this corrupts on the first JSON export/import "
+                             f"round trip; use a base64 VARCHAR instead")
         keys = {r[0] for r in con.execute(
             "SELECT DISTINCT unnest(json_keys(json)) FROM read_json_objects(?, format='newline_delimited')",
             [path]).fetchall()}

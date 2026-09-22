@@ -118,6 +118,14 @@ def test_sql_handles_semicolons_inside_strings():
     assert json.loads(lines(d, "t.json")[0])["note"] == "one; two"
 
 
+def test_blob_column_is_caught():
+    d = make_project()
+    s = open(f"{d}/data/schema.sql").read().replace("note VARCHAR,", "note BLOB,", 1)
+    open(f"{d}/data/schema.sql", "w").write(s)
+    r = dc(d, "check")
+    assert r.returncode == 1 and "BLOB" in r.stdout and "base64" in r.stdout, r.stdout
+
+
 def test_checks_fail_on_violation():
     d = make_project()
     open(f"{d}/checks/01.sql", "w").write("SELECT id FROM t WHERE id = 'a';")
