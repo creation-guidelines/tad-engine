@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/creation-guidelines/tad-engine/compare/v1.0.1...v1.1.0) (2026-09-22)
+
+
+### Features
+
+* **ci:** tag dist at each release, so consumers can pin a version ([#7](https://github.com/creation-guidelines/tad-engine/issues/7)) ([2c7030b](https://github.com/creation-guidelines/tad-engine/commit/2c7030ba6a3c498524a5078ddf976277f125e91d))
+
 ## [1.0.1](https://github.com/creation-guidelines/tad-engine/compare/v1.0.0...v1.0.1) (2026-09-22)
 
 
