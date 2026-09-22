@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/creation-guidelines/tad-engine/compare/v1.1.0...v1.1.1) (2026-09-22)
+
+
+### Bug Fixes
+
+* **ci:** namespace the dist tag as dist/vX.Y.Z, not vX.Y.Z ([#9](https://github.com/creation-guidelines/tad-engine/issues/9)) ([910ecb0](https://github.com/creation-guidelines/tad-engine/commit/910ecb0656d37899c827638438390568dacf8fb4))
+
 ## [1.1.0](https://github.com/creation-guidelines/tad-engine/compare/v1.0.1...v1.1.0) (2026-09-22)
 
 
