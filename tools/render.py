@@ -139,11 +139,18 @@ def render_table_page(t):
     """Each field is a kramdown definition list (Term / : Definition) instead of a bold-labeled
     line - GitHub Pages' default markdown engine (kramdown) renders that as <dl><dt><dd>, which
     reads as plain indented text with no bold and no font-size jump, closer to an RFC's minimal
-    style, while still keeping every value's own markdown (links, etc.) processed normally."""
+    style, while still keeping every value's own markdown (links, etc.) processed normally.
+
+    A log-shaped table (rows meant to be read as a chronological sequence, not a reference list -
+    detected structurally by having both an "entry_date" and a "title" column, session_log's
+    shape) gets a horizontal rule between entries instead of just blank space, since a log reads
+    as a sequence of separate events rather than a set of cross-referenced definitions."""
     c = table_cols[t]
     label_col = "name" if "name" in c else ("title" if "title" in c else ("id" if "id" in c else None))
+    is_log = {"entry_date", "title"} <= set(c)
+    rows_ = q(f"SELECT * FROM {t} ORDER BY rowid")
     lines = [f"# {t.replace('_', ' ').title()}", ""]
-    for i, row in enumerate(q(f"SELECT * FROM {t} ORDER BY rowid")):
+    for i, row in enumerate(rows_):
         rec = dict(zip(c, row))
         rid = rec.get("id")
         heading = str(rec[label_col]) if label_col else f"Row {i + 1}"
@@ -166,6 +173,8 @@ def render_table_page(t):
                 cby = list(dict.fromkeys(cites_of_source(rid)))
                 if cby:
                     lines += ["Cited by", ": " + ", ".join(cby), ""]
+        if is_log and i < len(rows_) - 1:
+            lines += ["---", ""]
         lines.append("")
     return lines
 
