@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.0](https://github.com/creation-guidelines/tad-engine/compare/v1.1.0...v1.2.0) (2026-09-23)
+
+
+### Features
+
+* **render:** horizontal rule between log entries ([#13](https://github.com/creation-guidelines/tad-engine/issues/13)) ([273400f](https://github.com/creation-guidelines/tad-engine/commit/273400f9fff829bd80f4c87e2572bc32d85701b2))
+* **render:** use definition lists instead of bold field labels ([#11](https://github.com/creation-guidelines/tad-engine/issues/11)) ([d879b22](https://github.com/creation-guidelines/tad-engine/commit/d879b22f625bfe94395c4f9c238710e9a28a47d1))
+
+
+### Bug Fixes
+
+* **ci:** namespace the dist tag as dist/vX.Y.Z, not vX.Y.Z ([#9](https://github.com/creation-guidelines/tad-engine/issues/9)) ([910ecb0](https://github.com/creation-guidelines/tad-engine/commit/910ecb0656d37899c827638438390568dacf8fb4))
+
 ## [1.1.0](https://github.com/creation-guidelines/tad-engine/compare/v1.0.1...v1.1.0) (2026-09-22)
 
 
