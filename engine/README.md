@@ -2,7 +2,7 @@
 
 The reusable "text-as-data" engine: guard, canonicalize, and query a small dataset kept as a
 DuckDB `EXPORT DATABASE` folder (a `schema.sql`, a `load.sql`, one JSON-lines file per table), plus
-a schema-agnostic Markdown renderer. It knows nothing about your schema, table names, or subject
+a schema-agnostic renderer that writes Markdown, reStructuredText, or both. It knows nothing about your schema, table names, or subject
 matter - it's the plumbing, not the content.
 
 This is the engine extracted from [creation-guidelines/text-as-data-template](https://github.com/creation-guidelines/text-as-data-template).
@@ -17,12 +17,32 @@ the repo - the vendored files are plain committed files either way.
 | Path | What |
 |---|---|
 | `tools/dc.py` | `check` (guard against silent data loss), `canon` (validate + canonical export), `sql` (run SQL, then canonicalize), `checks` (run `checks/*.sql` against the data) |
-| `tools/render.py` | Render the data into Markdown pages, detecting a relations table and a sources table structurally rather than by name |
-| `tests/test_dc.py` | Tests for `dc.py`, runnable standalone here or vendored into a consumer |
+| `tools/render.py` | Render the data into Markdown and/or reStructuredText pages, detecting a relations table and a sources table structurally rather than by name |
+| `tests/test_dc.py`, `tests/test_render.py` | Tests for `dc.py` and `render.py`, runnable standalone here or vendored into a consumer |
 | `bootstrap.sh`, `requirements.txt` | Pinned DuckDB (pip) and Miller versions |
 
 Full behavior and the reasoning behind each rule (why no BLOB columns, why no foreign keys, why
 row order matters) is documented in the consuming template's `AGENTS.md`, not duplicated here.
+
+## Output formats
+
+`render.py` writes one page per table and an index. The format is chosen with `DOCS_FORMAT` (or `--format`), a
+comma-separated list, and **defaults to `md`**, so a consumer that does nothing gets exactly what it always got:
+
+```bash
+python3 .tad/tools/render.py                    # docs/*.md
+DOCS_FORMAT=rst python3 .tad/tools/render.py    # docs/*.rst
+DOCS_FORMAT=md,rst python3 .tad/tools/render.py # both, side by side
+```
+
+The data is written once. A value may hold the Markdown inline subset (`` `code` ``, `[text](url)`, `**bold**`,
+`*emphasis*`); for `rst` those become their reStructuredText forms and every other character that reStructuredText
+would read as markup (`*`, `|`, a trailing `_`, a line starting `- `) is escaped, so the same value is correct in both.
+Ids are normalised the way reStructuredText normalises them (`alpha_one` becomes `alpha-one`), in the target and in
+every link to it. The generated `rst` is validated in the engine's tests with docutils, with every warning an error.
+
+Adding a format is one class in `render.py` (see `Markdown` and `Rst`): the page is built once and a format only says how
+to write a title, a heading, an anchor, a field, a list of items, a rule and a link.
 
 ## For consuming repos
 
