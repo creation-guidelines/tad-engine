@@ -41,6 +41,9 @@ would read as markup (`*`, `|`, a trailing `_`, a line starting `- `) is escaped
 Ids are normalised the way reStructuredText normalises them (`alpha_one` becomes `alpha-one`), in the target and in
 every link to it. The generated `rst` is validated in the engine's tests with docutils, with every warning an error.
 
+An `about` table (columns `title` and `summary`) is not a page: its first row is the heading and introduction of the index, so the front page's
+words are data like the rest. Without one the index is headed "Index", as before.
+
 Adding a format is one class in `render.py` (see `Markdown` and `Rst`): the page is built once and a format only says how
 to write a title, a heading, an anchor, a field, a list of items, a rule and a link.
 
