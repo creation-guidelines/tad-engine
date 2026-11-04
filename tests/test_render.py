@@ -174,6 +174,55 @@ def test_an_underline_covers_a_wide_heading():
     assert len(lines[i + 1]) >= 14, "seven wide characters take fourteen columns"
 
 
+def make_project_with_about():
+    d = make_project()
+    con = duckdb.connect()
+    cwd = os.getcwd()
+    os.chdir(d)
+    try:
+        con.execute("IMPORT DATABASE 'data'")
+        con.execute("CREATE TABLE about(title VARCHAR, summary VARCHAR)")
+        con.execute("INSERT INTO about VALUES ('The Playbook', 'How it is done, with `code` and a [link](https://example.com/a).')")
+        con.execute("EXPORT DATABASE 'data' (FORMAT json)")
+    finally:
+        os.chdir(cwd)
+    return d
+
+
+def test_an_about_table_heads_the_index_and_is_not_a_page():
+    d = make_project_with_about()
+    assert render(d, "md,rst").returncode == 0
+    names = sorted(os.listdir(os.path.join(d, "docs")))
+    assert "about.md" not in names and "about.rst" not in names, names
+    md = read(d, "index.md")
+    assert md.startswith("<!-- Generated from data/ by .tad/tools/render.py. Do not edit by hand. -->\n\n# The Playbook\n\nHow it is done, with `code` and a [link](https://example.com/a).\n\n- [Concepts](concepts.md): 3\n"), md
+    rst = read(d, "index.rst")
+    assert rst.startswith(".. Generated from data/ by .tad/tools/render.py. Do not edit by hand.\n\nThe Playbook\n============\n\nHow it is done, with ``code`` and a `link <https://example.com/a>`__.\n\n- `Concepts <concepts.rst>`__: 3\n"), rst
+    assert "About" not in md and "About" not in rst, "it is not listed as a page either"
+
+
+def test_without_an_about_table_the_index_is_headed_index_as_before():
+    d = make_project()
+    render(d, "md")
+    assert read(d, "index.md").startswith("<!-- Generated from data/ by .tad/tools/render.py. Do not edit by hand. -->\n\n# Index\n")
+
+
+def test_a_table_called_about_without_the_two_columns_is_an_ordinary_table():
+    d = make_project()
+    con = duckdb.connect()
+    cwd = os.getcwd()
+    os.chdir(d)
+    try:
+        con.execute("IMPORT DATABASE 'data'")
+        con.execute("CREATE TABLE about(id VARCHAR, name VARCHAR)")
+        con.execute("INSERT INTO about VALUES ('a1', 'Not a heading')")
+        con.execute("EXPORT DATABASE 'data' (FORMAT json)")
+    finally:
+        os.chdir(cwd)
+    render(d, "md")
+    assert os.path.exists(os.path.join(d, "docs", "about.md")) and read(d, "index.md").startswith("<!--") and "# Index" in read(d, "index.md")
+
+
 def test_the_inline_converter():
     r = load_render_functions()
     c = r.md_inline_to_rst

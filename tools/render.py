@@ -12,6 +12,8 @@ automatically rather than by table or column naming:
     treated as citations if one of its columns holds only values that exist as ids in a sources
     table (checked by content, not by name) - "Sources: ..." is added to the cited row, "Cited by:"
     to the source's own row.
+  - A table named `about` with (title, summary) columns is not a page: its first row is the heading and the introduction of the
+    index page, so the front page's words are data like everything else. Without it the index is headed "Index".
 
 Anything that does not match these shapes still renders: one page, one section per row, one line
 per non-empty column. Output is deterministic (no timestamps) so CI can require docs/ to be
@@ -219,6 +221,7 @@ tables = [r[0] for r in q(
 table_cols = {t: cols(t) for t in tables}
 relation_tables = [t for t in tables if {"from_id", "to_id", "relation"} <= set(table_cols[t])]
 sources_tables = [t for t in tables if {"title", "url"} <= set(table_cols[t])]
+about_table = next((t for t in tables if t == "about" and {"title", "summary"} <= set(table_cols[t])), None)
 
 
 def find_citation_columns(t, src_table):
@@ -244,7 +247,7 @@ citation_links = [
 citation_link_tables = {t for t, *_ in citation_links}
 # Relation tables and pure citation-link (join) tables are metadata, not content: fold into the
 # pages of what they connect instead of getting a page of their own.
-page_tables = [t for t in tables if t not in relation_tables and t not in citation_link_tables]
+page_tables = [t for t in tables if t not in relation_tables and t not in citation_link_tables and t != about_table]
 
 # id -> (display name, page) for any row of any page table that has an 'id' column
 index = {}
@@ -359,10 +362,12 @@ def write(F, name, lines):
 def main(argv=None, environ=None):
     formats = chosen_formats(sys.argv[1:] if argv is None else argv, os.environ if environ is None else environ)
     counts = {t: q(f"SELECT count(*) FROM {t}")[0][0] for t in page_tables}
+    about = q("SELECT title, summary FROM about ORDER BY rowid LIMIT 1") if about_table else []
     for F in formats:
         for t in page_tables:
             write(F, t, render_table_page(F, t))
-        out = F.title("Index") + [F.index_item(t.replace("_", " ").title(), t, counts[t]) for t in page_tables] + [""]
+        head = F.title(about[0][0]) + [F.text(about[0][1]), ""] if about else F.title("Index")
+        out = head + [F.index_item(t.replace("_", " ").title(), t, counts[t]) for t in page_tables] + [""]
         write(F, "index", out)
     print("rendered " + ", ".join(f"{v} {k}" for k, v in counts.items()) + f" as {', '.join(F.ext for F in formats)}")
 
