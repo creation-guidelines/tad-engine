@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.2.0](https://github.com/creation-guidelines/tad-engine/compare/v1.1.0...v1.2.0) (2026-11-04)
+
+
+### Features
+
+* **render:** an about table heads the index ([#19](https://github.com/creation-guidelines/tad-engine/issues/19)) ([f3f0aad](https://github.com/creation-guidelines/tad-engine/commit/f3f0aad081945f6b9aff4dc8c56b331eca528097))
+* **render:** horizontal rule between log entries ([#13](https://github.com/creation-guidelines/tad-engine/issues/13)) ([273400f](https://github.com/creation-guidelines/tad-engine/commit/273400f9fff829bd80f4c87e2572bc32d85701b2))
+* **render:** use definition lists instead of bold field labels ([#11](https://github.com/creation-guidelines/tad-engine/issues/11)) ([d879b22](https://github.com/creation-guidelines/tad-engine/commit/d879b22f625bfe94395c4f9c238710e9a28a47d1))
+* **render:** write reStructuredText as well as Markdown ([#16](https://github.com/creation-guidelines/tad-engine/issues/16)) ([c9df587](https://github.com/creation-guidelines/tad-engine/commit/c9df587a5eb24452f1e1f63e8ab94b63f7ee1ce5))
+
+
+### Bug Fixes
+
+* **ci:** dependabot watches the engine's own requirements ([#17](https://github.com/creation-guidelines/tad-engine/issues/17)) ([672303f](https://github.com/creation-guidelines/tad-engine/commit/672303f78c0bb9235675915243affab29734a0bf))
+* **ci:** namespace the dist tag as dist/vX.Y.Z, not vX.Y.Z ([#9](https://github.com/creation-guidelines/tad-engine/issues/9)) ([910ecb0](https://github.com/creation-guidelines/tad-engine/commit/910ecb0656d37899c827638438390568dacf8fb4))
+
 ## [1.1.0](https://github.com/creation-guidelines/tad-engine/compare/v1.0.1...v1.1.0) (2026-09-22)
 
 
