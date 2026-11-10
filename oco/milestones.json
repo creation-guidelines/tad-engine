@@ -1,0 +1,6 @@
+{"id":"tad-gathers","subject":"tad","ord":2,"title":"Gathers data by itself","horizon":"working","readiness":7,"criteria":"backlog:tad-gatherers","why":"From real files, tests and releases, without hands."}
+{"id":"tad-heart","subject":"tad","ord":6,"title":"The heart of oco-eco","horizon":"ongoing","readiness":9,"criteria":"backlog:tad-everywhere","why":"Every marked project keeps its data with tad."}
+{"id":"tad-in-rust","subject":"tad","ord":3,"title":"tad in Rust","horizon":"perfection","readiness":8,"criteria":"backlog:tad-rust","why":"Sturdier machinery, formats unchanged."}
+{"id":"tad-module","subject":"tad","ord":5,"title":"A rhizcut in every repository","horizon":"perfection","readiness":9,"criteria":"backlog:tad-rhizcut","why":"Owned, patchable, sending fixes back - not a template."}
+{"id":"tad-standard","subject":"tad","ord":4,"title":"Standard gatherers","horizon":"perfection","readiness":8,"criteria":"backlog:tad-standard-gatherers","why":"The same hooks and CI jobs in every repository."}
+{"id":"tad-works","subject":"tad","ord":1,"title":"The formats and pages","horizon":"working","readiness":6,"criteria":"backlog:tad-formats backlog:tad-pages","why":"Text as data, rendered."}
