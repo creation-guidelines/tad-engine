@@ -17,7 +17,7 @@ the repo - the vendored files are plain committed files either way.
 | Path | What |
 |---|---|
 | `tools/dc.py` | `check` (guard against silent data loss), `canon` (validate + canonical export), `sql` (run SQL, then canonicalize), `checks` (run `checks/*.sql` against the data) |
-| `tools/render.py` | Render the data into Markdown and/or reStructuredText pages, detecting a relations table and a sources table structurally rather than by name |
+| `tools/render.py` | Render the data into Markdown and/or reStructuredText pages, detecting a relations table, a sources table and a matrix (a status between two tables, drawn as a grid) structurally rather than by name |
 | `tests/test_dc.py`, `tests/test_render.py` | Tests for `dc.py` and `render.py`, runnable standalone here or vendored into a consumer |
 | `bootstrap.sh`, `requirements.txt` | Pinned DuckDB (pip) and Miller versions |
 

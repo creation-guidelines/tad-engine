@@ -49,6 +49,26 @@ def make_project():
     return d
 
 
+def make_matrix_project():
+    d = tempfile.mkdtemp()
+    con = duckdb.connect()
+    con.execute("CREATE TABLE features(id VARCHAR PRIMARY KEY, name VARCHAR NOT NULL, category VARCHAR NOT NULL)")
+    con.execute("INSERT INTO features VALUES ('calls','Voice calls','phone'),('wifi','Wi-Fi','connectivity'),"
+                "('sms','SMS','phone')")
+    con.execute("CREATE TABLE platforms(id VARCHAR PRIMARY KEY, name VARCHAR NOT NULL)")
+    con.execute("INSERT INTO platforms VALUES ('android','Android'),('pmos','postmarketOS')")
+    con.execute("CREATE TABLE feature_support(feature_id VARCHAR, platform_id VARCHAR, status VARCHAR, note VARCHAR)")
+    con.execute("INSERT INTO feature_support VALUES ('calls','android','works',NULL),"
+                "('calls','pmos','partial','VoLTE | not yet'),('wifi','pmos','works','fine')")
+    cwd = os.getcwd()
+    os.chdir(d)
+    try:
+        con.execute("EXPORT DATABASE 'data' (FORMAT json)")
+    finally:
+        os.chdir(cwd)
+    return d
+
+
 def render(d, fmt=None, *extra, env_format=None):
     env = dict(os.environ, DC_DIR="data", DOCS_DIR="docs")
     env.pop("DOCS_FORMAT", None)
@@ -221,6 +241,36 @@ def test_a_table_called_about_without_the_two_columns_is_an_ordinary_table():
         os.chdir(cwd)
     render(d, "md")
     assert os.path.exists(os.path.join(d, "docs", "about.md")) and read(d, "index.md").startswith("<!--") and "# Index" in read(d, "index.md")
+
+
+def test_a_status_between_two_tables_is_drawn_as_a_grid_grouped_by_category():
+    d = make_matrix_project()
+    r = render(d)
+    assert r.returncode == 0, r.stderr
+    md = open(os.path.join(d, "docs", "feature_support.md")).read()
+    grid, details = md.split("Details", 1)
+    assert grid.index("Phone") < grid.index("Connectivity"), "groups in the order they first appear"
+    assert "| Features | " in grid
+    calls = next(l for l in grid.splitlines() if l.startswith("| ") and "Voice calls" in l)
+    assert "\u2705" in calls and "\U0001F7E1" in calls
+    sms = next(l for l in grid.splitlines() if l.startswith("| ") and "SMS" in l)
+    assert sms.count("\u2754") == 2, "a pair nobody checked is unknown, not blank"
+    assert "VoLTE" not in grid and "VoLTE" in details, "notes go to the details, not the grid"
+    assert "feature_support.md#calls--pmos" in calls
+
+
+def test_a_matrix_in_rst_is_valid_without_a_single_warning():
+    d = make_matrix_project()
+    r = render(d, "rst")
+    assert r.returncode == 0, r.stderr
+    text = open(os.path.join(d, "docs", "feature_support.rst")).read()
+    assert ".. list-table::" in text
+    if publish_doctree is None:
+        print("    (docutils not installed: rst validation skipped)")
+        return
+    warnings = io.StringIO()
+    publish_doctree(text, settings_overrides={"warning_stream": warnings, "report_level": 2})
+    assert warnings.getvalue() == "", warnings.getvalue()
 
 
 def test_the_inline_converter():

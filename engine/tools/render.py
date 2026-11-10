@@ -12,6 +12,10 @@ automatically rather than by table or column naming:
     treated as citations if one of its columns holds only values that exist as ids in a sources
     table (checked by content, not by name) - "Sources: ..." is added to the cited row, "Cited by:"
     to the source's own row.
+  - A table with a `status` column and exactly two `<x>_id` columns, each naming another table (x, xs or xes)
+    that has ids, is a matrix: its page is a grid - rows from the table that has a `category` (or `group`)
+    column, one grid per group, columns from the other - each cell a status mark linked to its details
+    (the row's other columns) below the grids. A pair with no row shows as unknown, never as a guess.
   - A table named `about` with (title, summary) columns is not a page: its first row is the heading and the introduction of the
     index page, so the front page's words are data like everything else. Without it the index is headed "Index".
 
@@ -83,6 +87,12 @@ class Markdown:
 
     def index_item(self, label, page, count):
         return f"- [{label}]({page}.md): {count}"
+
+    def table(self, header, rows):
+        def cell(v):
+            return str(v).replace("|", "\\|").replace("\n", " ")
+        out = ["| " + " | ".join(cell(h) for h in header) + " |", "|" + "|".join("---" for _ in header) + "|"]
+        return out + ["| " + " | ".join(cell(c) for c in r) + " |" for r in rows] + [""]
 
 
 # reStructuredText turns an id into a lowercase, hyphen-separated one; links must name that form.
@@ -182,6 +192,12 @@ class Rst:
     def index_item(self, label, page, count):
         return f"- `{rst_escape(label)} <{page}.rst>`__: {count}"
 
+    def table(self, header, rows):
+        out = [".. list-table::", "   :header-rows: 1", ""]
+        for r in [header] + rows:
+            out += [("   * - " if i == 0 else "     - ") + str(v).replace("\n", " ") for i, v in enumerate(r)]
+        return out + [""]
+
 
 FORMATS = {"md": Markdown, "rst": Rst}
 
@@ -248,6 +264,45 @@ citation_link_tables = {t for t, *_ in citation_links}
 # Relation tables and pure citation-link (join) tables are metadata, not content: fold into the
 # pages of what they connect instead of getting a page of their own.
 page_tables = [t for t in tables if t not in relation_tables and t not in citation_link_tables and t != about_table]
+
+# ---- matrices: a status between two tables, drawn as a grid -----------------------------------
+
+GROUP_COLUMNS = ("category", "group")
+STATUS_MARKS = {
+    "works": "\u2705",
+    "partial": "\U0001F7E1",
+    "broken": "\u274C",
+    "missing": "\u274C",
+    "unknown": "\u2754",
+    "not-applicable": "\u2014",
+}
+
+
+def referenced_table(col):
+    """The table an `<x>_id` column points at - x, xs or xes - if it exists and has ids."""
+    if not col.endswith("_id"):
+        return None
+    base = col[:-3]
+    return next((t for t in (base, base + "s", base + "es") if t in table_cols and "id" in table_cols[t]), None)
+
+
+def matrix_shape(t):
+    """(row column, row table, column column, column table) when `t` is a matrix, else None."""
+    c = table_cols[t]
+    refs = [(col, referenced_table(col)) for col in c if referenced_table(col)]
+    if "status" not in c or len(refs) != 2:
+        return None
+    (rc, rt), (cc, ct) = refs
+
+    def grouped(x):
+        return any(g in table_cols[x] for g in GROUP_COLUMNS)
+
+    if grouped(ct) and not grouped(rt):
+        (rc, rt), (cc, ct) = (cc, ct), (rc, rt)
+    return rc, rt, cc, ct
+
+
+matrix_tables = {t: shape for t in page_tables if (shape := matrix_shape(t))}
 
 # id -> (display name, page) for any row of any page table that has an 'id' column
 index = {}
@@ -353,6 +408,53 @@ def render_table_page(F, t):
     return lines
 
 
+def render_matrix_page(F, t):
+    """A grid per group of rows; each cell a status mark linked to its details below."""
+    rc, rt, cc, ct = matrix_tables[t]
+    c = table_cols[t]
+    group_col = next((g for g in GROUP_COLUMNS if g in table_cols[rt]), None)
+    columns = [r[0] for r in q(f"SELECT id FROM {ct} ORDER BY rowid")]
+    cells = {}
+    for row in q(f"SELECT * FROM {t} ORDER BY rowid"):
+        rec = dict(zip(c, row))
+        cells[(rec[rc], rec[cc])] = rec
+    groups = {}
+    for rec in q(f"SELECT id{', ' + group_col if group_col else ''} FROM {rt} ORDER BY rowid"):
+        groups.setdefault(rec[1] if group_col else None, []).append(rec[0])
+
+    def label(rid):
+        return index[rid][0] if rid in index else str(rid)
+
+    lines = F.title(t.replace("_", " ").title())
+    legend = " \u00b7 ".join(f"{m} {s}" for s, m in STATUS_MARKS.items())
+    lines += [F.text(f"Rows are {rt.replace('_', ' ')}, columns {ct.replace('_', ' ')}. {legend}. "
+                     f"A pair nobody has checked shows {STATUS_MARKS['unknown']}."), ""]
+    header = [rt.replace("_", " ").title()] + [link(F, cid) for cid in columns]
+    for g, ids in groups.items():
+        if g is not None:
+            lines += F.heading(str(g).replace("-", " ").capitalize())
+        body = []
+        for rid in ids:
+            row = [link(F, rid)]
+            for cid in columns:
+                rec = cells.get((rid, cid))
+                if rec is None:
+                    row.append(STATUS_MARKS["unknown"])
+                else:
+                    mark = STATUS_MARKS.get(str(rec["status"]), str(rec["status"]))
+                    row.append(F.link(mark, t, f"{rid}--{cid}"))
+            body.append(row)
+        lines += F.table(header, body)
+    if cells:
+        lines += F.heading("Details")
+        for (rid, cid), rec in cells.items():
+            parts = [str(rec["status"])] + [
+                f"{k.replace('_', ' ')}: {fmt(v)}" for k, v in rec.items() if k not in (rc, cc, "status") and fmt(v)
+            ]
+            lines += F.anchor(f"{rid}--{cid}") + F.field(f"{label(rid)} \u00d7 {label(cid)}", F.text(" \u2014 ".join(parts)))
+    return lines
+
+
 def write(F, name, lines):
     os.makedirs(DOCS, exist_ok=True)
     with open(f"{DOCS}/{name}.{F.ext}", "w") as f:
@@ -365,7 +467,7 @@ def main(argv=None, environ=None):
     about = q("SELECT title, summary FROM about ORDER BY rowid LIMIT 1") if about_table else []
     for F in formats:
         for t in page_tables:
-            write(F, t, render_table_page(F, t))
+            write(F, t, render_matrix_page(F, t) if t in matrix_tables else render_table_page(F, t))
         head = F.title(about[0][0]) + [F.text(about[0][1]), ""] if about else F.title("Index")
         out = head + [F.index_item(t.replace("_", " ").title(), t, counts[t]) for t in page_tables] + [""]
         write(F, "index", out)
