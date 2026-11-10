@@ -107,6 +107,15 @@ what `dist` exists to avoid, and a same-named tag on `dist` would collide with i
 namespace is repo-wide, not per-branch). `dist/vX.Y.Z` is a distinct, namespaced tag created right
 after each release, pointing at `dist`'s tip at that moment.
 
+**Repositories that squash-merge** (most do): `git subrepo pull .tad` records the commit it last synced
+from, and a squash merge rewrites that commit away, so the next pull fails ("the last sync point ...
+is not an ancestor"). Since `.tad/` is never edited downstream, replace it outright instead - it needs
+no history:
+
+```bash
+git subrepo clone --force https://github.com/creation-guidelines/tad-engine.git .tad -b dist
+```
+
 ## Releases
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/) and are linted on
 every PR; [release-please](https://github.com/googleapis/release-please) turns them into a
