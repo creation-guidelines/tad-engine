@@ -4,7 +4,7 @@ schema = 1
 
 [project]
 id = "creation-guidelines/tad-engine"
-name = "tad: tables as data, rendered"
+name = "tad: text as data, rendered"
 kind = "tool"
 parent = "open-commons-observatory"
 
