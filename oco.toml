@@ -1,0 +1,11 @@
+# This repository's mark: how it fits the Open Commons Observatory's picture.
+# https://github.com/open-commons-observatory/open-commons-observatory.github.io/tree/main/marks
+schema = 1
+
+[project]
+id = "creation-guidelines/tad-engine"
+name = "tad: tables as data, rendered"
+kind = "tool"
+parent = "open-commons-observatory"
+
+[exports]
