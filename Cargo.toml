@@ -1,0 +1,4 @@
+# tad, the Rust tool, lives in tad/; this workspace lets the package conveyor build it from the root.
+[workspace]
+members = ["tad"]
+resolver = "2"
