@@ -215,7 +215,7 @@ impl Format for Markdown {
         "md"
     }
     fn notice(&self) -> &'static str {
-        "<!-- Generated from data/ by .tad/tools/render.py. Do not edit by hand. -->"
+        "<!-- Generated from data/ by tad. Do not edit by hand. -->"
     }
     fn text(&self, s: &str) -> String {
         s.into()
@@ -287,7 +287,7 @@ impl Format for Rst {
         "rst"
     }
     fn notice(&self) -> &'static str {
-        ".. Generated from data/ by .tad/tools/render.py. Do not edit by hand."
+        ".. Generated from data/ by tad. Do not edit by hand."
     }
     fn text(&self, s: &str) -> String {
         md_inline_to_rst(&self.0, s)
