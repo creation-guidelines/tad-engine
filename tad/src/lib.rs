@@ -47,6 +47,12 @@ pub struct Table {
     /// Pairs (a, b): when a is given, b is required.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub requires: Vec<[String; 2]>,
+    /// Rows may carry fields not declared here (a shared minimum that each project extends).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub extra_fields: bool,
+    /// The field a new row is dated by: `tad set` fills it with today's date when it adds a row.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dated: Option<String>,
     pub fields: Vec<Field>,
 }
 
@@ -475,15 +481,7 @@ pub fn check(dir: &Path, d: &Declaration) -> Result<(usize, Vec<String>)> {
         let Ok(text) = std::fs::read_to_string(&file) else {
             continue;
         };
-        let patterns: BTreeMap<&str, Regex> = t
-            .fields
-            .iter()
-            .filter_map(|f| {
-                f.pattern
-                    .as_ref()
-                    .map(|p| Regex::new(p).map(|r| (f.name.as_str(), r)))
-            })
-            .collect::<std::result::Result<_, _>>()
+        let patterns = patterns_of(t)
             .with_context(|| format!("{name}: a pattern is not a regular expression"))?;
         let mut keys: HashSet<String> = HashSet::new();
         for (i, line) in text
@@ -497,69 +495,8 @@ pub fn check(dir: &Path, d: &Declaration) -> Result<(usize, Vec<String>)> {
                 problems.push(format!("{at}: not a JSON object"));
                 continue;
             };
-            for k in row.keys() {
-                if !t.fields.iter().any(|f| &f.name == k) {
-                    problems.push(format!("{at}: the field {k} is not declared"));
-                }
-            }
-            for f in &t.fields {
-                let v = match row.get(&f.name) {
-                    None | Some(Value::Null) => {
-                        if f.required {
-                            problems.push(format!("{at}: {} is required", f.name));
-                        }
-                        continue;
-                    }
-                    Some(v) => v,
-                };
-                if !type_fits(&f.ty, v) {
-                    problems.push(format!("{at}: {} should be a {}, not {v}", f.name, f.ty));
-                    continue;
-                }
-                if let Some(n) = v.as_f64() {
-                    if f.minimum.is_some_and(|m| n < m) || f.maximum.is_some_and(|m| n > m) {
-                        problems.push(format!(
-                            "{at}: {} {n} is outside {} to {}",
-                            f.name,
-                            f.minimum.unwrap_or(f64::MIN),
-                            f.maximum.unwrap_or(f64::MAX)
-                        ));
-                    }
-                }
-                if let Some(s) = v.as_str() {
-                    if !f.allowed.is_empty() && !f.allowed.iter().any(|a| a == s) {
-                        problems.push(format!(
-                            "{at}: {} '{s}' is not one of: {}",
-                            f.name,
-                            f.allowed.join(", ")
-                        ));
-                    }
-                    if let Some(r) = patterns.get(f.name.as_str()) {
-                        if !r.is_match(s) {
-                            problems.push(format!(
-                                "{at}: {} '{s}' does not match {}",
-                                f.name,
-                                r.as_str()
-                            ));
-                        }
-                    }
-                    if let Some(p) = &f.starts_with {
-                        if !s.starts_with(p.as_str()) {
-                            problems.push(format!("{at}: {} '{s}' should start with {p}", f.name));
-                        }
-                    }
-                }
-            }
-            for [a, b] in &t.distinct {
-                if row.get(a).is_some() && row.get(a) == row.get(b) {
-                    problems.push(format!("{at}: {a} and {b} must differ"));
-                }
-            }
-            for [a, b] in &t.requires {
-                let given = |k: &str| row.get(k).is_some_and(|v| !v.is_null());
-                if given(a) && !given(b) {
-                    problems.push(format!("{at}: {b} is required when {a} is given"));
-                }
+            for p in row_problems(t, &row, &patterns) {
+                problems.push(format!("{at}: {p}"));
             }
             if !t.key.is_empty() {
                 let k: Vec<String> = t
@@ -579,6 +516,114 @@ pub fn check(dir: &Path, d: &Declaration) -> Result<(usize, Vec<String>)> {
     }
     problems.extend(check_rules(dir, &d.rules)?);
     Ok((rows, problems))
+}
+
+fn patterns_of(t: &Table) -> std::result::Result<BTreeMap<&str, Regex>, regex::Error> {
+    t.fields
+        .iter()
+        .filter_map(|f| {
+            f.pattern
+                .as_ref()
+                .map(|p| Regex::new(p).map(|r| (f.name.as_str(), r)))
+        })
+        .collect()
+}
+
+fn row_problems(
+    t: &Table,
+    row: &serde_json::Map<String, Value>,
+    patterns: &BTreeMap<&str, Regex>,
+) -> Vec<String> {
+    let mut problems = Vec::new();
+    if !t.extra_fields {
+        for k in row.keys() {
+            if !t.fields.iter().any(|f| &f.name == k) {
+                problems.push(format!("the field {k} is not declared"));
+            }
+        }
+    }
+    for f in &t.fields {
+        let v = match row.get(&f.name) {
+            None | Some(Value::Null) => {
+                if f.required {
+                    problems.push(format!("{} is required", f.name));
+                }
+                continue;
+            }
+            Some(v) => v,
+        };
+        if !type_fits(&f.ty, v) {
+            problems.push(format!("{} should be a {}, not {v}", f.name, f.ty));
+            continue;
+        }
+        if let Some(n) = v.as_f64() {
+            if f.minimum.is_some_and(|m| n < m) || f.maximum.is_some_and(|m| n > m) {
+                problems.push(format!(
+                    "{} {n} is outside {} to {}",
+                    f.name,
+                    f.minimum.unwrap_or(f64::MIN),
+                    f.maximum.unwrap_or(f64::MAX)
+                ));
+            }
+        }
+        if let Some(s) = v.as_str() {
+            if !f.allowed.is_empty() && !f.allowed.iter().any(|a| a == s) {
+                problems.push(format!(
+                    "{} '{s}' is not one of: {}",
+                    f.name,
+                    f.allowed.join(", ")
+                ));
+            }
+            if let Some(r) = patterns.get(f.name.as_str()) {
+                if !r.is_match(s) {
+                    problems.push(format!("{} '{s}' does not match {}", f.name, r.as_str()));
+                }
+            }
+            if let Some(p) = &f.starts_with {
+                if !s.starts_with(p.as_str()) {
+                    problems.push(format!("{} '{s}' should start with {p}", f.name));
+                }
+            }
+        }
+    }
+    for [a, b] in &t.distinct {
+        if row.get(a).is_some() && row.get(a) == row.get(b) {
+            problems.push(format!("{a} and {b} must differ"));
+        }
+    }
+    for [a, b] in &t.requires {
+        let given = |k: &str| row.get(k).is_some_and(|v| !v.is_null());
+        if given(a) && !given(b) {
+            problems.push(format!("{b} is required when {a} is given"));
+        }
+    }
+    problems
+}
+
+/// One row checked against its table: undeclared fields (unless the table allows extra fields),
+/// types, required fields, allowed values, patterns, prefixes, ranges, differing pairs and
+/// dependencies. A key's uniqueness and the rules across tables need the whole data: see `check`.
+pub fn check_row(t: &Table, row: &serde_json::Map<String, Value>) -> Result<Vec<String>> {
+    let patterns = patterns_of(t).context("a pattern is not a regular expression")?;
+    Ok(row_problems(t, row, &patterns))
+}
+
+/// Today's date (UTC), YYYY-MM-DD - the civil date of the system clock's day.
+pub fn today() -> String {
+    let days = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() / 86_400)
+        .unwrap_or(0) as i64;
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!("{y:04}-{m:02}-{d:02}")
 }
 
 /// A row's canonical line: compact JSON, the declared fields in their declared order, an empty field
@@ -738,6 +783,13 @@ pub fn set(
             .find(|x| &x.name == f)
             .with_context(|| format!("{table} has no field {f}"))?;
         row.insert(f.clone(), typed(field, v)?);
+    }
+    if pos.is_none() {
+        if let Some(f) = &t.dated {
+            if row.get(f).is_none_or(Value::is_null) {
+                row.insert(f.clone(), Value::String(today()));
+            }
+        }
     }
     let added = pos.is_none();
     match pos {
@@ -1030,6 +1082,70 @@ kinds = ["pairs-with"]
                 .unwrap()
                 .contains("\"readiness\":3,\"origin_year\":null"),
             "typed by the declaration, empty fields null"
+        );
+    }
+
+    #[test]
+    fn extra_fields_dated_rows_and_one_row_checked() {
+        let t: Table = toml::from_str(
+            r#"
+key = ["id"]
+extra_fields = true
+dated = "opened"
+fields = [{ name = "id", type = "string", required = true }, { name = "status", type = "string", enum = ["open", "done"] }, { name = "opened", type = "string" }]
+"#,
+        )
+        .unwrap();
+        let row = |s: &str| match serde_json::from_str::<Value>(s).unwrap() {
+            Value::Object(m) => m,
+            _ => unreachable!(),
+        };
+        assert!(
+            check_row(&t, &row(r#"{"id":"a","status":"open","mine":1}"#))
+                .unwrap()
+                .is_empty(),
+            "an extra field is allowed"
+        );
+        let p = check_row(&t, &row(r#"{"status":"maybe"}"#))
+            .unwrap()
+            .join("\n");
+        assert!(
+            p.contains("id is required") && p.contains("'maybe' is not one of"),
+            "{p}"
+        );
+        let mut strict = t.clone();
+        strict.extra_fields = false;
+        assert!(check_row(&strict, &row(r#"{"id":"a","mine":1}"#))
+            .unwrap()
+            .join("")
+            .contains("mine is not declared"));
+        let d = Declaration {
+            tables: [("items".to_string(), t)].into_iter().collect(),
+            ..Default::default()
+        };
+        let dir = std::env::temp_dir().join(format!("tad-dated-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("items.json"), "").unwrap();
+        set(
+            &dir,
+            &d,
+            "items",
+            &["x".into()],
+            &[("status".into(), "open".into())],
+        )
+        .unwrap();
+        let line = std::fs::read_to_string(dir.join("items.json")).unwrap();
+        assert!(
+            line.contains(&format!("\"opened\":\"{}\"", today())),
+            "a new row is dated: {line}"
+        );
+        let day = today();
+        assert!(
+            day.len() == 10
+                && day.as_bytes()[4] == b'-'
+                && day[..4].parse::<i32>().unwrap() >= 2026,
+            "{day}"
         );
     }
 }
