@@ -19,3 +19,11 @@ sqlparser = "0.59"
 toml = "0.8"
 fancy-regex = "0.14"
 unicode-width = "0.2"
+
+[package.metadata.deb]
+maintainer = "creation-guidelines <agent@creation-guidelines>"
+extended-description = "A transparent database of text files in git: tables declared as data, every row checked, canonical form, checked edits, documents rendered from data."
+assets = [["target/release/tad", "usr/bin/", "755"]]
+
+[package.metadata.generate-rpm]
+assets = [{ source = "target/release/tad", dest = "/usr/bin/tad", mode = "755" }]

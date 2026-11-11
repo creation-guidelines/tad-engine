@@ -1,0 +1,11 @@
+# How tad is delivered: read by the package conveyor (linux-package-distribution-oco/conveyor).
+# Binaries for every release tag tad-v*; tad's build and pack scripts stay here.
+[package]
+name = "tad"
+tag-prefix = "tad-v"
+fingerprint = "none - tad publishes no package repository yet"
+key = "none"
+
+[binaries]
+build = "packaging/build-binary.sh"
+package = "packaging/build-packages.sh"
