@@ -9,6 +9,7 @@ kind = "tool"
 parent = "open-commons-observatory"
 
 [exports]
+glimpses = "oco/glimpses.json"
 concepts = "oco/concepts.json"
 decisions = "oco/decisions.json"
 sources = "oco/sources.json"
