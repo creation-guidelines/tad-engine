@@ -1,0 +1,6 @@
+# The repositories that use tad, each installing it with bin/install-tad.sh; bin/update-pins.sh
+# keeps their pinned version current, by landing a change their own CI must pass.
+linux-phone-oco/docs
+creation-guidelines/software-engineering-canon
+creation-guidelines/ideal-project-playbook
+git-rhizoid/git-rhizoid.github.io

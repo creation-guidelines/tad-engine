@@ -39,6 +39,9 @@ A repository installs tad from a pinned release, checking it against the release
 Releases are built by the [package conveyor](https://github.com/linux-package-distribution-oco/conveyor)
 for x86_64 and aarch64: tarballs, `.deb` and `.rpm`, with checksums and signed provenance.
 
+A pinned version is kept current by `bin/update-pins.sh`, run weekly on the lab machine: for each repository listed in
+`consumers` it moves the pin, re-renders, and lands the change only if that repository's CI passes.
+
 In use by: [linux-phone-oco/docs](https://github.com/linux-phone-oco/docs),
 [software-engineering-canon](https://github.com/creation-guidelines/software-engineering-canon),
 [ideal-project-playbook](https://github.com/creation-guidelines/ideal-project-playbook) and
