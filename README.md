@@ -1,14 +1,54 @@
-# tad-engine
+# tad
 
-Source repository for the "text-as-data" engine. This top level holds this repo's own governance
-(CI, commit linting, release automation) - it is **not** what gets vendored into consuming repos.
+**tad** keeps a small database as plain text in git: one JSON object per line, one file per table,
+so a change to one row is a one-line diff that anyone can read without a tool. Each repository
+declares its tables as data in `tables.toml`, and tad checks every row against it, keeps the files
+in one canonical form, edits a row only when the result still checks out, and renders the data
+into documents.
 
-The actual engine payload lives in [`engine/`](engine/), and is what
-[`git subtree`](https://git-scm.com/book/en/v2/Git-Tools-Advanced-Merging#_subtree_merge) pulls
-into a consumer's `.tad/` folder - published to a `dist` branch that mirrors `engine/` alone (see
-[`.github/workflows/dist.yml`](.github/workflows/dist.yml)), so a consumer's `.tad/` never picks up
-this repo's own `commitlint.config.js`, `CHANGELOG.md`, and so on.
+```
+tad check                      # every row, and every rule across tables
+tad canon                      # rewrite data/ in canonical form (only when it checks out)
+tad set TABLE --key ID --set field=value ...   # add or update one row, checked; nothing kept that breaks a rule
+tad render [--format md,rst]   # data/ -> docs/: one page per table, Markdown and/or reStructuredText
+tad declare --from-sql schema.sql   # translate a DuckDB schema into a declaration (refusing what it does not know)
+```
 
-**If you're consuming this engine, read [`engine/README.md`](engine/README.md)** for what it does
-and the exact `git subtree` commands. This top-level README is for people working on the engine
-itself.
+## The declaration
+
+`tables.toml` declares each table (after Frictionless Data's [Table Schema](https://specs.frictionlessdata.io/table-schema/)):
+its `key`, and its `fields` - each with a `name`, a `type` (`string`, `integer`, `number`, `boolean`,
+`date`, `datetime` or `list`), and as needed `required`, `enum`, `pattern`, `starts_with`, `minimum`
+and `maximum`. A table may also say which pairs of fields must differ (`distinct`) and which field a
+given field requires (`requires`). Rules across tables: `unique_ids` (ids unique across tables),
+`references` (a field names a row of other tables), `appears_in` (every row is cited somewhere) and
+`no_mirror` (a symmetric relation is not recorded both ways).
+
+## Rendering
+
+One page per table, one section per row; shapes are found from the data, not from names: a relation
+table (`from_id`, `to_id`, `relation`) folds into the pages it connects; a sources table (`title`,
+`url`) and two-column citation tables become "Sources" and "Cited by"; a table with a `status` and two
+`<x>_id` columns is drawn as a grid; a table named `about` heads the index. Output is deterministic,
+so CI can require the documents to be exactly what the data renders to.
+
+## Using it
+
+A repository installs tad from a pinned release, checking it against the release's checksums
+(see `bin/install-tad.sh` in any of the repositories below), and its CI runs `make verify`.
+Releases are built by the [package conveyor](https://github.com/linux-package-distribution-oco/conveyor)
+for x86_64 and aarch64: tarballs, `.deb` and `.rpm`, with checksums and signed provenance.
+
+In use by: [linux-phone-oco/docs](https://github.com/linux-phone-oco/docs),
+[software-engineering-canon](https://github.com/creation-guidelines/software-engineering-canon),
+[ideal-project-playbook](https://github.com/creation-guidelines/ideal-project-playbook) and
+[git-rhizoid.github.io](https://github.com/git-rhizoid/git-rhizoid.github.io).
+
+## History
+
+tad began as a Python engine on DuckDB, vendored into each repository. On 2026-11-11 it was rewritten
+in Rust and proven equal before any repository switched: the same verdicts on all four repositories
+and on sixteen deliberately broken copies, the same canonical bytes, the same edits, and the same 74
+documents in both formats, byte for byte. The vendored copies had drifted (three of four were older);
+the switch ended that. The Python engine's last version is in this repository's history at
+commit 02da2bc (https://github.com/creation-guidelines/tad-engine/tree/02da2bc/engine).
