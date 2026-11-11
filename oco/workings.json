@@ -1,0 +1,2 @@
+{"id":"w-01","what":"The guard and the one fixed form","kind":"check","serves":"tad-works","how":"Every edit is loaded, checked against the schema and its rules, and written back one way only; anything else fails.","why":"A one-row change must be a one-line difference, or nobody can review it.","evidence":"","uses":""}
+{"id":"w-02","what":"Editing by query","kind":"tool","serves":"tad-works","how":"Data is changed through one runner with queries, never by hand in the files.","why":"An edit by hand skips every rule.","evidence":"","uses":""}
