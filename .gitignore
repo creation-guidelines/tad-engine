@@ -3,3 +3,4 @@ __pycache__/
 data.bak/
 node_modules/
 target/
+.oco/
