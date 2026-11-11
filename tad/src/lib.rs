@@ -10,6 +10,8 @@ use serde_json::Value;
 use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
+pub mod render;
+
 /// One field of a table.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct Field {
