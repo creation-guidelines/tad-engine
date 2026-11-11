@@ -41,6 +41,18 @@ enum Cmd {
         #[arg(long, default_value = "data")]
         data: PathBuf,
     },
+    /// Render documents from the data: one page per table, in Markdown and/or reStructuredText
+    Render {
+        #[arg(long, default_value = "tables.toml")]
+        tables: PathBuf,
+        #[arg(long, default_value = "data")]
+        data: PathBuf,
+        #[arg(long, default_value = "docs")]
+        docs: PathBuf,
+        /// md, rst, or md,rst (default: DOCS_FORMAT, else md)
+        #[arg(long)]
+        format: Option<String>,
+    },
     /// Add or update one row, checked: a change that would break a rule is not kept
     Set {
         /// The table
@@ -104,6 +116,26 @@ fn main() -> Result<()> {
                 } else {
                     format!("canonical now: {}", changed.join(", "))
                 }
+            );
+        }
+        Cmd::Render {
+            tables,
+            data,
+            docs,
+            format,
+        } => {
+            let names = format
+                .or_else(|| std::env::var("DOCS_FORMAT").ok())
+                .unwrap_or_else(|| "md".into());
+            let mut list: Vec<String> = Vec::new();
+            for n in names.split(',').map(str::trim).filter(|n| !n.is_empty()) {
+                if !list.iter().any(|x| x == n) {
+                    list.push(n.to_string());
+                }
+            }
+            println!(
+                "{}",
+                tad::render::render(&data, &declaration(&tables)?, &docs, &list)?
             );
         }
         Cmd::Set {
