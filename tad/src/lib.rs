@@ -48,10 +48,174 @@ pub struct Table {
     pub fields: Vec<Field>,
 }
 
+/// Ids unique across several tables.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct UniqueIds {
+    pub tables: Vec<String>,
+}
+
+/// `field` ("table.field") names a row of one of `to` (by id); an empty value names nothing and passes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct Reference {
+    pub field: String,
+    pub to: Vec<String>,
+}
+
+/// Every row of `table` appears (by id) among the values of `within` ("table.field").
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct AppearsIn {
+    pub table: String,
+    #[serde(rename = "in")]
+    pub within: String,
+}
+
+/// In `table`, a relation of one of `kinds` is not also recorded the other way round.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct NoMirror {
+    pub table: String,
+    pub from: String,
+    pub to: String,
+    pub kind: String,
+    pub kinds: Vec<String>,
+}
+
+/// Rules across tables.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct Rules {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unique_ids: Vec<UniqueIds>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub references: Vec<Reference>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub appears_in: Vec<AppearsIn>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub no_mirror: Vec<NoMirror>,
+}
+
+impl Rules {
+    pub fn is_empty(&self) -> bool {
+        self.unique_ids.is_empty()
+            && self.references.is_empty()
+            && self.appears_in.is_empty()
+            && self.no_mirror.is_empty()
+    }
+}
+
 /// A repository's tables, declared as data.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct Declaration {
     pub tables: BTreeMap<String, Table>,
+    #[serde(default, skip_serializing_if = "Rules::is_empty")]
+    pub rules: Rules,
+}
+
+fn rows_of(dir: &Path, table: &str) -> Vec<serde_json::Map<String, Value>> {
+    std::fs::read_to_string(dir.join(format!("{table}.json")))
+        .unwrap_or_default()
+        .lines()
+        .filter_map(|l| match serde_json::from_str::<Value>(l) {
+            Ok(Value::Object(m)) => Some(m),
+            _ => None,
+        })
+        .collect()
+}
+
+fn text(v: Option<&Value>) -> Option<String> {
+    match v {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(other) => Some(other.to_string()),
+    }
+}
+
+fn split_field(f: &str) -> Result<(&str, &str)> {
+    f.split_once('.')
+        .with_context(|| format!("'{f}' should be table.field"))
+}
+
+/// The rules across tables, checked against the rows in `dir`.
+pub fn check_rules(dir: &Path, r: &Rules) -> Result<Vec<String>> {
+    let mut problems = Vec::new();
+    let ids = |tables: &[String]| -> HashSet<String> {
+        tables
+            .iter()
+            .flat_map(|t| rows_of(dir, t))
+            .filter_map(|m| text(m.get("id")))
+            .collect()
+    };
+    for u in &r.unique_ids {
+        let mut seen: BTreeMap<String, Vec<&str>> = BTreeMap::new();
+        for t in &u.tables {
+            for m in rows_of(dir, t) {
+                if let Some(id) = text(m.get("id")) {
+                    seen.entry(id).or_default().push(t);
+                }
+            }
+        }
+        for (id, ts) in seen.iter().filter(|(_, ts)| ts.len() > 1) {
+            problems.push(format!(
+                "the id '{id}' is used more than once, in: {}",
+                ts.join(", ")
+            ));
+        }
+    }
+    for x in &r.references {
+        let (table, field) = split_field(&x.field)?;
+        let known = ids(&x.to);
+        for m in rows_of(dir, table) {
+            if let Some(v) = text(m.get(field)) {
+                if !known.contains(&v) {
+                    problems.push(format!(
+                        "{table}: {field} '{v}' names nothing in {}",
+                        x.to.join(" or ")
+                    ));
+                }
+            }
+        }
+    }
+    for a in &r.appears_in {
+        let (table, field) = split_field(&a.within)?;
+        let found: HashSet<String> = rows_of(dir, table)
+            .iter()
+            .filter_map(|m| text(m.get(field)))
+            .collect();
+        for m in rows_of(dir, &a.table) {
+            if let Some(id) = text(m.get("id")) {
+                if !found.contains(&id) {
+                    problems.push(format!(
+                        "{}: '{id}' appears nowhere in {}",
+                        a.table, a.within
+                    ));
+                }
+            }
+        }
+    }
+    for n in &r.no_mirror {
+        let rows = rows_of(dir, &n.table);
+        let all: HashSet<(String, String, String)> = rows
+            .iter()
+            .filter_map(|m| {
+                Some((
+                    text(m.get(&n.from))?,
+                    text(m.get(&n.to))?,
+                    text(m.get(&n.kind))?,
+                ))
+            })
+            .filter(|(_, _, k)| n.kinds.contains(k))
+            .collect();
+        let mut found: Vec<&(String, String, String)> = all
+            .iter()
+            .filter(|(a, b, k)| a < b && all.contains(&(b.clone(), a.clone(), k.clone())))
+            .collect();
+        found.sort();
+        for (a, b, k) in found {
+            problems.push(format!(
+                "{}: '{a}' {k} '{b}' is recorded both ways",
+                n.table
+            ));
+        }
+    }
+    Ok(problems)
 }
 
 fn unquote(s: &str) -> String {
@@ -405,6 +569,7 @@ pub fn check(dir: &Path, d: &Declaration) -> Result<(usize, Vec<String>)> {
             }
         }
     }
+    problems.extend(check_rules(dir, &d.rules)?);
     Ok((rows, problems))
 }
 
@@ -530,5 +695,59 @@ CREATE TABLE days(id VARCHAR PRIMARY KEY, entry_date DATE NOT NULL, readiness IN
         ] {
             assert!(all.contains(want), "missing '{want}' in:\n{all}");
         }
+    }
+
+    #[test]
+    fn rules_across_tables_are_checked() {
+        let dir = std::env::temp_dir().join(format!("tad-rules-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let w = |t: &str, s: &str| std::fs::write(dir.join(format!("{t}.json")), s).unwrap();
+        w("devices", "{\"id\":\"surya\"}\n{\"id\":\"mic\"}\n");
+        w("components", "{\"id\":\"mic\"}\n");
+        w(
+            "support",
+            "{\"device_id\":\"surya\"}\n{\"device_id\":\"nowhere\"}\n{\"device_id\":null}\n",
+        );
+        w("sources", "{\"id\":\"cited\"}\n{\"id\":\"lonely\"}\n");
+        w("cites", "{\"source_id\":\"cited\"}\n");
+        w("relations", "{\"from_id\":\"a\",\"to_id\":\"b\",\"relation\":\"pairs-with\"}\n{\"from_id\":\"b\",\"to_id\":\"a\",\"relation\":\"pairs-with\"}\n{\"from_id\":\"a\",\"to_id\":\"c\",\"relation\":\"uses\"}\n{\"from_id\":\"c\",\"to_id\":\"a\",\"relation\":\"uses\"}\n");
+        let r: Rules = toml::from_str(
+            r#"
+[[unique_ids]]
+tables = ["devices", "components"]
+[[references]]
+field = "support.device_id"
+to = ["devices"]
+[[appears_in]]
+table = "sources"
+in = "cites.source_id"
+[[no_mirror]]
+table = "relations"
+from = "from_id"
+to = "to_id"
+kind = "relation"
+kinds = ["pairs-with"]
+"#,
+        )
+        .unwrap();
+        let p = check_rules(&dir, &r).unwrap().join("\n");
+        assert!(
+            p.contains("the id 'mic' is used more than once, in: devices, components"),
+            "{p}"
+        );
+        assert!(
+            p.contains("device_id 'nowhere' names nothing in devices") && !p.contains("null"),
+            "an empty reference passes: {p}"
+        );
+        assert!(
+            p.contains("'lonely' appears nowhere in cites.source_id") && !p.contains("'cited'"),
+            "{p}"
+        );
+        assert!(
+            p.contains("'a' pairs-with 'b' is recorded both ways") && !p.contains("uses"),
+            "only the symmetric kinds: {p}"
+        );
+        assert_eq!(p.lines().count(), 4, "{p}");
     }
 }

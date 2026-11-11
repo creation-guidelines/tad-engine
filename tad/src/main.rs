@@ -49,19 +49,9 @@ fn main() -> Result<()> {
             data,
         } => {
             let d = match (tables, from_sql) {
-                (Some(t), _) => toml::from_str(
-                    &std::fs::read_to_string(&t)
-                        .with_context(|| format!("reading {}", t.display()))?,
-                )?,
-                (None, Some(s)) => tad::from_sql(
-                    &std::fs::read_to_string(&s)
-                        .with_context(|| format!("reading {}", s.display()))?,
-                )?,
-                (None, None) => {
-                    toml::from_str(&std::fs::read_to_string(data.join("tables.toml")).context(
-                        "no declaration: give --tables or --from-sql, or keep data/tables.toml",
-                    )?)?
-                }
+                (Some(t), _) => toml::from_str(&std::fs::read_to_string(&t).with_context(|| format!("reading {}", t.display()))?)?,
+                (None, Some(s)) => tad::from_sql(&std::fs::read_to_string(&s).with_context(|| format!("reading {}", s.display()))?)?,
+                (None, None) => toml::from_str(&std::fs::read_to_string("tables.toml").context("no declaration: give --tables or --from-sql, or keep tables.toml at the repository's root")?)?,
             };
             let (rows, problems) = tad::check(&data, &d)?;
             for p in &problems {
