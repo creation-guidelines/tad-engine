@@ -1,30 +1,36 @@
+# tad's releases, automated: release-please keeps a release pull request open from the conventional
+# commits (the version in tad/Cargo.toml and the changelog); merging it (land merges release pull
+# requests) tags tad-vX.Y.Z, and the package conveyor builds the binaries with signed provenance in
+# this same run - a tag made with GitHub's own token cannot start another workflow.
 name: release
 on:
   push:
     branches: [main]
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      created: ${{ steps.rp.outputs['tad--release_created'] }}
+      tag: ${{ steps.rp.outputs['tad--tag_name'] }}
     steps:
-      - id: release
-        uses: googleapis/release-please-action@v5
+      - id: rp
+        uses: googleapis/release-please-action@v4
         with:
-          release-type: simple
-      - name: Tag dist at the same version
-        # dist mirrors engine/ (see dist.yml) and is already current by the time a release lands,
-        # since release-please can only bump a version from a feat/fix commit already on main, and
-        # that same push re-synced dist. Tagging dist's current tip gives consumers a pinned,
-        # engine-only ref to subrepo-clone/pull instead of the moving `dist` branch - two `gh api`
-        # calls, no checkout needed. Namespaced as dist/vX.Y.Z, NOT the bare vX.Y.Z release-please
-        # already tagged on main (a plain create-ref there 409s: "Reference already exists").
-        if: ${{ steps.release.outputs.release_created }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.release.outputs.tag_name }}
-        run: |
-          sha=$(gh api "repos/${{ github.repository }}/git/refs/heads/dist" --jq .object.sha)
-          gh api "repos/${{ github.repository }}/git/refs" -f ref="refs/tags/dist/$TAG" -f sha="$sha"
-          echo "Tagged dist@$sha as dist/$TAG"
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+  binaries:
+    needs: release-please
+    if: needs.release-please.outputs.created == 'true'
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    uses: linux-package-distribution-oco/conveyor/.github/workflows/binaries.yml@v1
+    with:
+      tag: ${{ needs.release-please.outputs.tag }}
+      declaration: packaging/conveyor.toml
