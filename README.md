@@ -1,7 +1,9 @@
 # tad
 
-**tad** keeps a small database as plain text in git: one JSON object per line, one file per table,
-so a change to one row is a one-line diff that anyone can read without a tool. Each repository
+**tad** keeps a small database as plain text in git, with three ways into the same data: **files** you can
+read and diff (one JSON object per line, one file per table, so a change to one row is a one-line diff),
+**text** you can reshape with jq and Miller, and **SQL** with joins (DuckDB), every change brought back to
+the same canonical files. Why, and what was weighed: the research `why-tad-exists` in this repository's data. Each repository
 declares its tables as data in `tables.toml`, and tad checks every row against it, keeps the files
 in one canonical form, edits a row only when the result still checks out, and renders the data
 into documents.
