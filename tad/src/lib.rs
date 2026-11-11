@@ -573,6 +573,186 @@ pub fn check(dir: &Path, d: &Declaration) -> Result<(usize, Vec<String>)> {
     Ok((rows, problems))
 }
 
+/// A row's canonical line: compact JSON, the declared fields in their declared order, an empty field
+/// written as null - exactly as DuckDB writes it, so the switch to tad changes no byte.
+pub fn canonical_line(t: &Table, row: &serde_json::Map<String, Value>) -> String {
+    let parts: Vec<String> = t
+        .fields
+        .iter()
+        .map(|f| {
+            format!(
+                "{}:{}",
+                Value::String(f.name.clone()),
+                row.get(&f.name).cloned().unwrap_or(Value::Null)
+            )
+        })
+        .collect();
+    format!("{{{}}}", parts.join(","))
+}
+
+fn parse_rows(file: &Path) -> Result<Vec<serde_json::Map<String, Value>>> {
+    let text = std::fs::read_to_string(file).unwrap_or_default();
+    let mut rows = Vec::new();
+    for (i, l) in text
+        .lines()
+        .enumerate()
+        .filter(|(_, l)| !l.trim().is_empty())
+    {
+        match serde_json::from_str::<Value>(l) {
+            Ok(Value::Object(m)) => rows.push(m),
+            _ => bail!("{}, line {}: not a JSON object", file.display(), i + 1),
+        }
+    }
+    Ok(rows)
+}
+
+fn write_rows(file: &Path, t: &Table, rows: &[serde_json::Map<String, Value>]) -> Result<bool> {
+    let new: String = rows.iter().map(|r| canonical_line(t, r) + "\n").collect();
+    let old = std::fs::read_to_string(file).unwrap_or_default();
+    if new == old {
+        return Ok(false);
+    }
+    std::fs::write(file, new).with_context(|| format!("writing {}", file.display()))?;
+    Ok(true)
+}
+
+/// Rewrites every declared table in canonical form, keeping its rows in their order - only when the
+/// data checks out, as Python's canon validated on import. Returns the tables whose files changed.
+pub fn canon(dir: &Path, d: &Declaration) -> Result<Vec<String>> {
+    let (_, problems) = check(dir, d)?;
+    if !problems.is_empty() {
+        bail!(
+            "{} problems - canon writes nothing until they are fixed:\n{}",
+            problems.len(),
+            problems.join("\n")
+        );
+    }
+    let mut changed = Vec::new();
+    for (name, t) in &d.tables {
+        let file = dir.join(format!("{name}.json"));
+        if !file.exists() {
+            continue;
+        }
+        if write_rows(&file, t, &parse_rows(&file)?)? {
+            changed.push(name.clone());
+        }
+    }
+    Ok(changed)
+}
+
+/// A value for a field, typed by its declaration; an empty value is null.
+fn typed(f: &Field, s: &str) -> Result<Value> {
+    if s.is_empty() {
+        return Ok(Value::Null);
+    }
+    Ok(match f.ty.as_str() {
+        "integer" => Value::from(
+            s.trim()
+                .parse::<i64>()
+                .with_context(|| format!("{} is a whole number, not '{s}'", f.name))?,
+        ),
+        "number" => Value::from(
+            s.trim()
+                .parse::<f64>()
+                .with_context(|| format!("{} is a number, not '{s}'", f.name))?,
+        ),
+        "boolean" => match s.trim() {
+            "true" => Value::Bool(true),
+            "false" => Value::Bool(false),
+            _ => bail!("{} is true or false, not '{s}'", f.name),
+        },
+        "list" => Value::Array(
+            s.split(',')
+                .map(str::trim)
+                .filter(|x| !x.is_empty())
+                .map(|x| Value::String(x.into()))
+                .collect(),
+        ),
+        _ => Value::String(s.into()),
+    })
+}
+
+/// Adds or updates one row (found by its key), then checks the whole repository; if anything breaks,
+/// the file is put back as it was and the problems are named. New rows go at the end, as DuckDB would.
+pub fn set(
+    dir: &Path,
+    d: &Declaration,
+    table: &str,
+    key: &[String],
+    changes: &[(String, String)],
+) -> Result<String> {
+    let t = d
+        .tables
+        .get(table)
+        .with_context(|| format!("no table {table} is declared"))?;
+    if t.key.is_empty() || key.len() != t.key.len() {
+        bail!(
+            "{table} is keyed by ({}); give that many --key values",
+            t.key.join(", ")
+        );
+    }
+    let file = dir.join(format!("{table}.json"));
+    let old = std::fs::read_to_string(&file).unwrap_or_default();
+    let mut rows = parse_rows(&file)?;
+    let pos = rows.iter().position(|r| {
+        t.key
+            .iter()
+            .zip(key)
+            .all(|(k, v)| text(r.get(k)).as_deref() == Some(v.as_str()))
+    });
+    let mut row = match pos {
+        Some(i) => rows[i].clone(),
+        None => t
+            .key
+            .iter()
+            .zip(key)
+            .map(|(k, v)| {
+                Ok((
+                    k.clone(),
+                    typed(
+                        t.fields
+                            .iter()
+                            .find(|f| &f.name == k)
+                            .context("a key field is not declared")?,
+                        v,
+                    )?,
+                ))
+            })
+            .collect::<Result<_>>()?,
+    };
+    for (f, v) in changes {
+        if t.key.contains(f) {
+            bail!("{f} is part of the key, given by --key");
+        }
+        let field = t
+            .fields
+            .iter()
+            .find(|x| &x.name == f)
+            .with_context(|| format!("{table} has no field {f}"))?;
+        row.insert(f.clone(), typed(field, v)?);
+    }
+    let added = pos.is_none();
+    match pos {
+        Some(i) => rows[i] = row,
+        None => rows.push(row),
+    }
+    write_rows(&file, t, &rows)?;
+    let (_, problems) = check(dir, d)?;
+    if !problems.is_empty() {
+        std::fs::write(&file, old)?;
+        bail!(
+            "nothing changed - this would break {} rule(s):\n{}",
+            problems.len(),
+            problems.join("\n")
+        );
+    }
+    Ok(format!(
+        "{} {table}/{}",
+        if added { "added" } else { "updated" },
+        key.join("/")
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -749,5 +929,99 @@ kinds = ["pairs-with"]
             "only the symmetric kinds: {p}"
         );
         assert_eq!(p.lines().count(), 4, "{p}");
+    }
+
+    #[test]
+    fn canon_writes_declared_order_with_nulls_and_set_checks_before_it_keeps() {
+        let d = from_sql(SCHEMA).unwrap();
+        let dir = std::env::temp_dir().join(format!("tad-canon-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("components.json");
+        std::fs::write(
+            &f,
+            "{\"category\": \"audio\", \"id\": \"mic\", \"name\": \"Микрофон \\\"1\\\"\"}\n",
+        )
+        .unwrap();
+        assert_eq!(canon(&dir, &d).unwrap(), vec!["components"]);
+        assert_eq!(
+            std::fs::read_to_string(&f).unwrap(),
+            "{\"id\":\"mic\",\"name\":\"Микрофон \\\"1\\\"\",\"category\":\"audio\"}\n"
+        );
+        assert!(
+            canon(&dir, &d).unwrap().is_empty(),
+            "canonical data is left byte for byte"
+        );
+        assert_eq!(
+            set(
+                &dir,
+                &d,
+                "components",
+                &["mic".into()],
+                &[("category".into(), "display".into())]
+            )
+            .unwrap(),
+            "updated components/mic"
+        );
+        assert_eq!(
+            set(
+                &dir,
+                &d,
+                "components",
+                &["cam".into()],
+                &[
+                    ("name".into(), "Camera".into()),
+                    ("category".into(), "other".into())
+                ]
+            )
+            .unwrap(),
+            "added components/cam"
+        );
+        assert!(
+            std::fs::read_to_string(&f)
+                .unwrap()
+                .ends_with("{\"id\":\"cam\",\"name\":\"Camera\",\"category\":\"other\"}\n"),
+            "new rows at the end"
+        );
+        let before = std::fs::read_to_string(&f).unwrap();
+        let e = set(
+            &dir,
+            &d,
+            "components",
+            &["mic".into()],
+            &[("category".into(), "maybe".into())],
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            e.contains("nothing changed") && e.contains("'maybe' is not one of"),
+            "{e}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&f).unwrap(),
+            before,
+            "a refused edit leaves the file as it was"
+        );
+        std::fs::write(dir.join("days.json"), "").unwrap();
+        assert_eq!(
+            set(
+                &dir,
+                &d,
+                "days",
+                &["d".into()],
+                &[
+                    ("entry_date".into(), "2026-11-11".into()),
+                    ("readiness".into(), "3".into())
+                ]
+            )
+            .unwrap(),
+            "added days/d"
+        );
+        assert!(
+            std::fs::read_to_string(dir.join("days.json"))
+                .unwrap()
+                .contains("\"readiness\":3,\"origin_year\":null"),
+            "typed by the declaration, empty fields null"
+        );
     }
 }

@@ -1,7 +1,7 @@
 //! tad - a transparent database of text files in git.
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[command(
@@ -22,9 +22,9 @@ enum Cmd {
         #[arg(long)]
         from_sql: PathBuf,
     },
-    /// Check every row of every declared table
+    /// Check every row of every declared table, and the rules across tables
     Check {
-        /// The declaration (TOML)
+        /// The declaration (default: tables.toml)
         #[arg(long, conflicts_with = "from_sql")]
         tables: Option<PathBuf>,
         /// Or a schema written in SQL, translated on the fly
@@ -34,6 +34,34 @@ enum Cmd {
         #[arg(long, default_value = "data")]
         data: PathBuf,
     },
+    /// Rewrite every table in canonical form, only when the data checks out
+    Canon {
+        #[arg(long, default_value = "tables.toml")]
+        tables: PathBuf,
+        #[arg(long, default_value = "data")]
+        data: PathBuf,
+    },
+    /// Add or update one row, checked: a change that would break a rule is not kept
+    Set {
+        /// The table
+        table: String,
+        /// The row's key value(s), in the key's order (repeat for a key of several fields)
+        #[arg(long = "key", required = true)]
+        key: Vec<String>,
+        /// FIELD=VALUE (repeatable; an empty value is null; a list is comma-separated)
+        #[arg(long = "set")]
+        set: Vec<String>,
+        #[arg(long, default_value = "tables.toml")]
+        tables: PathBuf,
+        #[arg(long, default_value = "data")]
+        data: PathBuf,
+    },
+}
+
+fn declaration(path: &Path) -> Result<tad::Declaration> {
+    Ok(toml::from_str(
+        &std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?,
+    )?)
 }
 
 fn main() -> Result<()> {
@@ -49,9 +77,12 @@ fn main() -> Result<()> {
             data,
         } => {
             let d = match (tables, from_sql) {
-                (Some(t), _) => toml::from_str(&std::fs::read_to_string(&t).with_context(|| format!("reading {}", t.display()))?)?,
-                (None, Some(s)) => tad::from_sql(&std::fs::read_to_string(&s).with_context(|| format!("reading {}", s.display()))?)?,
-                (None, None) => toml::from_str(&std::fs::read_to_string("tables.toml").context("no declaration: give --tables or --from-sql, or keep tables.toml at the repository's root")?)?,
+                (Some(t), _) => declaration(&t)?,
+                (None, Some(s)) => tad::from_sql(
+                    &std::fs::read_to_string(&s)
+                        .with_context(|| format!("reading {}", s.display()))?,
+                )?,
+                (None, None) => declaration(Path::new("tables.toml"))?,
             };
             let (rows, problems) = tad::check(&data, &d)?;
             for p in &problems {
@@ -63,6 +94,36 @@ fn main() -> Result<()> {
                 println!("{} problems in {rows} rows", problems.len());
                 std::process::exit(1);
             }
+        }
+        Cmd::Canon { tables, data } => {
+            let changed = tad::canon(&data, &declaration(&tables)?)?;
+            println!(
+                "{}",
+                if changed.is_empty() {
+                    "canonical already".to_string()
+                } else {
+                    format!("canonical now: {}", changed.join(", "))
+                }
+            );
+        }
+        Cmd::Set {
+            table,
+            key,
+            set,
+            tables,
+            data,
+        } => {
+            let mut changes = Vec::new();
+            for s in &set {
+                let Some((f, v)) = s.split_once('=') else {
+                    bail!("'{s}' is not FIELD=VALUE")
+                };
+                changes.push((f.trim().to_string(), v.to_string()));
+            }
+            println!(
+                "{}",
+                tad::set(&data, &declaration(&tables)?, &table, &key, &changes)?
+            );
         }
     }
     Ok(())
