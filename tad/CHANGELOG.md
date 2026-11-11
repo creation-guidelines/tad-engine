@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/creation-guidelines/tad-engine/compare/tad-v0.3.0...tad-v0.4.0) (2026-11-11)
+
+
+### Features
+
+* check_row, extra fields and dated rows - what ocoeco's shared language needs ([#56](https://github.com/creation-guidelines/tad-engine/issues/56)) ([ed98ffb](https://github.com/creation-guidelines/tad-engine/commit/ed98ffb3f4550a37945832f1af211f5ab89bcdf0))
+
 ## [0.3.0](https://github.com/creation-guidelines/tad-engine/compare/tad-v0.2.0...tad-v0.3.0) (2026-11-11)
 
 
