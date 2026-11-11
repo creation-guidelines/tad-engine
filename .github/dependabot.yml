@@ -1,7 +1,7 @@
 version: 2
 updates:
-  - package-ecosystem: pip
-    directory: /engine
+  - package-ecosystem: cargo
+    directory: /
     schedule:
       interval: weekly
   - package-ecosystem: npm
