@@ -42,6 +42,9 @@ pub struct Table {
     pub key: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub distinct: Vec<[String; 2]>,
+    /// Pairs (a, b): when a is given, b is required.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requires: Vec<[String; 2]>,
     pub fields: Vec<Field>,
 }
 
@@ -118,22 +121,41 @@ fn field_mut<'a>(t: &'a mut Table, table: &str, name: &str) -> Result<&'a mut Fi
 /// Applies one CHECK, recognised from its printed form; refuses what it does not recognise.
 fn apply_check(t: &mut Table, table: &str, text: &str) -> Result<()> {
     let mut e = strip_parens(text);
-    // "(x IS NULL) OR (rule about x)": an empty value is allowed anyway unless the field is required
+    // "(A IS NULL) OR (rule)": guarded by A. A rule about A itself is A's own rule (an empty value is
+    // allowed anyway unless A is required); "B IS NOT NULL" means B is required when A is given; any
+    // other rule guarded by another field is refused rather than guessed.
     let nullable = Regex::new(r"^\((\S+) IS NULL\)\s+OR\s+(\(.*\))$")?;
     let owned;
+    let mut guard: Option<String> = None;
     if let Some(m) = nullable.captures(e) {
+        guard = Some(unquote(&m[1]));
         owned = m[2].to_string();
         e = strip_parens(&owned);
     }
+    let same = |name: &str| -> Result<()> {
+        match &guard {
+            Some(g) if *g != unquote(name) => bail!("{table}: a rule on {} guarded by {g}, which this tool does not know, refused rather than dropped", unquote(name)),
+            _ => Ok(()),
+        }
+    };
     let quoted = r"'((?:[^']|'')*)'";
     let pat = Regex::new(&format!(r"^regexp_matches\(\s*(\S+?)\s*,\s*{quoted}\s*\)$"))?;
     let within = Regex::new(r"^(\S+)\s+IN\s+\((.*)\)$")?;
     let starts = Regex::new(&format!(r"^starts_with\(\s*(\S+?)\s*,\s*{quoted}\s*\)$"))?;
     let differ = Regex::new(r"^(\S+)\s*(?:<>|!=)\s*(\S+)$")?;
     let between = Regex::new(r"^(\S+)\s+BETWEEN\s+(-?[0-9.]+)\s+AND\s+(-?[0-9.]+)$")?;
-    if let Some(m) = pat.captures(e) {
+    let not_null = Regex::new(r"^(\S+)\s+IS NOT NULL$")?;
+    if let Some(m) = not_null.captures(e) {
+        let f = unquote(&m[1]);
+        match &guard {
+            Some(g) if *g != f => t.requires.push([g.clone(), f]),
+            _ => field_mut(t, table, &f)?.required = true,
+        }
+    } else if let Some(m) = pat.captures(e) {
+        same(&m[1])?;
         field_mut(t, table, &m[1])?.pattern = Some(m[2].replace("''", "'"));
     } else if let Some(m) = within.captures(e) {
+        same(&m[1])?;
         let items: Vec<String> = Regex::new(quoted)?
             .captures_iter(&m[2])
             .map(|c| c[1].replace("''", "'"))
@@ -143,14 +165,20 @@ fn apply_check(t: &mut Table, table: &str, text: &str) -> Result<()> {
         }
         field_mut(t, table, &m[1])?.allowed = items;
     } else if let Some(m) = starts.captures(e) {
+        same(&m[1])?;
         field_mut(t, table, &m[1])?.starts_with = Some(m[2].replace("''", "'"));
-    } else if let Some(m) = Regex::new(r"^(\S+)\s+IS NOT NULL$")?.captures(e) {
-        field_mut(t, table, &m[1])?.required = true;
     } else if let Some(m) = between.captures(e) {
+        same(&m[1])?;
         let f = field_mut(t, table, &m[1])?;
         f.minimum = Some(m[2].parse()?);
         f.maximum = Some(m[3].parse()?);
     } else if let Some(m) = differ.captures(e) {
+        if guard.is_some() {
+            bail!(
+                "{table}: a guarded comparison, refused rather than dropped: {}",
+                cut(e)
+            );
+        }
         t.distinct.push([unquote(&m[1]), unquote(&m[2])]);
     } else {
         bail!(
@@ -355,6 +383,12 @@ pub fn check(dir: &Path, d: &Declaration) -> Result<(usize, Vec<String>)> {
                     problems.push(format!("{at}: {a} and {b} must differ"));
                 }
             }
+            for [a, b] in &t.requires {
+                let given = |k: &str| row.get(k).is_some_and(|v| !v.is_null());
+                if given(a) && !given(b) {
+                    problems.push(format!("{at}: {b} is required when {a} is given"));
+                }
+            }
             if !t.key.is_empty() {
                 let k: Vec<String> = t
                     .key
@@ -381,7 +415,7 @@ mod tests {
     const SCHEMA: &str = r#"CREATE TABLE components(id VARCHAR PRIMARY KEY, "name" VARCHAR NOT NULL, category VARCHAR NOT NULL, CHECK(regexp_matches(id, '^[a-z0-9]+(-[a-z0-9]+)*$')), CHECK((category IN ('audio', 'display', 'other'))));;
 CREATE TABLE sources(id VARCHAR PRIMARY KEY, title VARCHAR NOT NULL, url VARCHAR NOT NULL, "year" INTEGER, tags VARCHAR[] DEFAULT(main.list_value()) NOT NULL, CHECK(starts_with(url, 'https://')));;
 CREATE TABLE relations(from_id VARCHAR, to_id VARCHAR, relation VARCHAR, PRIMARY KEY(from_id, to_id, relation), CHECK((from_id != to_id)));;
-CREATE TABLE days(id VARCHAR PRIMARY KEY, entry_date DATE NOT NULL, readiness INTEGER, origin_year INTEGER, CHECK(readiness BETWEEN 1 AND 9), CHECK(entry_date IS NOT NULL), CHECK(((origin_year IS NULL) OR (origin_year BETWEEN 1950 AND 2100))));;"#;
+CREATE TABLE days(id VARCHAR PRIMARY KEY, entry_date DATE NOT NULL, readiness INTEGER, origin_year INTEGER, origin_author VARCHAR, CHECK(readiness BETWEEN 1 AND 9), CHECK(entry_date IS NOT NULL), CHECK(((origin_year IS NULL) OR (origin_author IS NOT NULL))), CHECK(((origin_year IS NULL) OR (origin_year BETWEEN 1950 AND 2100))));;"#;
 
     #[test]
     fn a_duckdb_schema_becomes_a_declaration() {
@@ -422,6 +456,21 @@ CREATE TABLE days(id VARCHAR PRIMARY KEY, entry_date DATE NOT NULL, readiness IN
             Some(1950.0),
             "an empty-or-range check is a range"
         );
+        assert_eq!(
+            d.tables["days"].requires,
+            vec![["origin_year".to_string(), "origin_author".to_string()]],
+            "a guard on another field is a dependency"
+        );
+        assert!(
+            !d.tables["days"].fields[4].required,
+            "not required on its own"
+        );
+        assert!(from_sql(
+            "CREATE TABLE t(a INTEGER, b VARCHAR, CHECK(((a IS NULL) OR (b IN ('x')))));"
+        )
+        .unwrap_err()
+        .to_string()
+        .contains("guarded by a"));
         let again: Declaration = toml::from_str(&toml::to_string(&d).unwrap()).unwrap();
         assert_eq!(again, d, "a declaration survives being written as TOML");
     }
@@ -461,7 +510,7 @@ CREATE TABLE days(id VARCHAR PRIMARY KEY, entry_date DATE NOT NULL, readiness IN
         .unwrap();
         std::fs::write(
             dir.join("days.json"),
-            "{\"id\":\"d\",\"entry_date\":\"2026-13-01\",\"readiness\":12}\n",
+            "{\"id\":\"d\",\"entry_date\":\"2026-13-01\",\"readiness\":12,\"origin_year\":2001}\n",
         )
         .unwrap();
         let (_, p) = check(&dir, &d).unwrap();
@@ -477,6 +526,7 @@ CREATE TABLE days(id VARCHAR PRIMARY KEY, entry_date DATE NOT NULL, readiness IN
             "must differ",
             "entry_date should be a date",
             "readiness 12 is outside 1 to 9",
+            "origin_author is required when origin_year is given",
         ] {
             assert!(all.contains(want), "missing '{want}' in:\n{all}");
         }
