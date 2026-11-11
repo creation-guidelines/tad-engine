@@ -109,6 +109,12 @@ pub struct Declaration {
     pub tables: BTreeMap<String, Table>,
     #[serde(default, skip_serializing_if = "Rules::is_empty")]
     pub rules: Rules,
+    /// How the index reads, and the words for relations (optional; see render).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub site: Option<render::SitePresentation>,
+    /// How each page reads (optional; a page not named renders as every page does).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub pages: BTreeMap<String, render::Page>,
 }
 
 fn rows_of(dir: &Path, table: &str) -> Vec<serde_json::Map<String, Value>> {

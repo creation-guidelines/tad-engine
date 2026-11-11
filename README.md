@@ -32,6 +32,17 @@ table (`from_id`, `to_id`, `relation`) folds into the pages it connects; a sourc
 `<x>_id` columns is drawn as a grid; a table named `about` heads the index. Output is deterministic,
 so CI can require the documents to be exactly what the data renders to.
 
+## Presentation, declared as data
+
+With nothing declared, every table renders as above. A repository may declare in `tables.toml` how
+its pages read, so it never needs a renderer of its own: `[site]` gives the index a `title`, an
+`intro`, an `index` order (with `count = { field, open_unless }` for "N open of M"), and
+`relation_words` (each relation kind in words, from either end: `serves = ["Serves", "Served by"]`);
+`[pages.<table>]` gives a page an `intro`, a `group_by` field with ordered `groups` (and
+`skip_empty_groups`), an `order_by`, and what each row `show`s, in order - a `field` (or several
+`fields`, joined) as a plain paragraph or under a `label`, its `relations`, its `sources` - or a
+`list` layout instead of sections. The software-engineering canon renders this way.
+
 ## Using it
 
 A repository installs tad from a pinned release, checking it against the release's checksums

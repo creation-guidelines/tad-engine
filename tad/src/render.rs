@@ -6,6 +6,7 @@
 use crate::{Declaration, Table};
 use anyhow::{bail, Context, Result};
 use fancy_regex::Regex as Fancy;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
@@ -203,8 +204,15 @@ trait Format {
     fn field(&self, label: &str, value: &str) -> Vec<String>;
     fn many(&self, label: &str, items: &[String]) -> Vec<String>;
     fn rule(&self) -> Vec<String>;
-    fn index_item(&self, label: &str, page: &str, count: usize) -> String;
+    fn index_item(&self, label: &str, page: &str, count: &str) -> String;
     fn table(&self, header: &[String], rows: &[Vec<String>]) -> Vec<String>;
+    fn para(&self, text: &str) -> Vec<String> {
+        vec![text.to_string(), String::new()]
+    }
+    fn heading_at(&self, text: &str, level: usize) -> Vec<String>;
+    fn list_item(&self, text: &str) -> String {
+        format!("- {text}")
+    }
 }
 
 struct Markdown;
@@ -238,6 +246,9 @@ impl Format for Markdown {
     fn heading(&self, text: &str) -> Vec<String> {
         vec![format!("### {text}"), String::new()]
     }
+    fn heading_at(&self, text: &str, level: usize) -> Vec<String> {
+        vec![format!("{} {text}", "#".repeat(level)), String::new()]
+    }
     fn field(&self, label: &str, value: &str) -> Vec<String> {
         vec![label.into(), format!(": {value}"), String::new()]
     }
@@ -250,7 +261,7 @@ impl Format for Markdown {
     fn rule(&self) -> Vec<String> {
         vec!["---".into(), String::new()]
     }
-    fn index_item(&self, label: &str, page: &str, count: usize) -> String {
+    fn index_item(&self, label: &str, page: &str, count: &str) -> String {
         format!("- [{label}]({page}.md): {count}")
     }
     fn table(&self, header: &[String], rows: &[Vec<String>]) -> Vec<String> {
@@ -314,6 +325,9 @@ impl Format for Rst {
     fn heading(&self, text: &str) -> Vec<String> {
         self.underlined(text, '-')
     }
+    fn heading_at(&self, text: &str, level: usize) -> Vec<String> {
+        self.underlined(text, ['=', '-', '~', '^'][level.clamp(1, 4) - 1])
+    }
     fn field(&self, label: &str, value: &str) -> Vec<String> {
         let mut v = vec![label.to_string()];
         v.extend(value.split('\n').map(|l| {
@@ -339,7 +353,7 @@ impl Format for Rst {
     fn rule(&self) -> Vec<String> {
         vec!["----".into(), String::new()]
     }
-    fn index_item(&self, label: &str, page: &str, count: usize) -> String {
+    fn index_item(&self, label: &str, page: &str, count: &str) -> String {
         format!("- `{} <{page}.rst>`__: {count}", rst_escape(&self.0, label))
     }
     fn table(&self, header: &[String], rows: &[Vec<String>]) -> Vec<String> {
@@ -389,6 +403,7 @@ struct Site<'a> {
     page_tables: Vec<String>,
     matrix: HashMap<String, (String, String, String, String)>,
     index: HashMap<String, (String, String)>,
+    presentation: Option<&'a SitePresentation>,
 }
 
 impl<'a> Site<'a> {
@@ -430,6 +445,7 @@ impl<'a> Site<'a> {
             page_tables: vec![],
             matrix: HashMap::new(),
             index: HashMap::new(),
+            presentation: d.site.as_ref(),
         };
         let tables: Vec<String> = d.tables.keys().cloned().collect();
         s.relation_tables = tables
@@ -793,6 +809,322 @@ impl<'a> Site<'a> {
     }
 }
 
+// ---- presentation, declared as data -------------------------------------------------------------
+// With nothing declared, every page renders as above. A repository may declare, in tables.toml, how
+// its index and any page read: a [site] (the index's title, introduction, page order and counts, and
+// relations in words) and [pages.<table>] (introduction, grouping, order, what each row shows, or a
+// list layout). Presentation is data like everything else, so no repository needs its own renderer.
+
+/// The index, and the words for relations.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct SitePresentation {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// Lines under the title, written one after another.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub intro: Vec<String>,
+    /// The pages on the index, in this order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub index: Vec<IndexEntry>,
+    /// A relation kind -> [the words from its source, the words from its target].
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub relation_words: BTreeMap<String, [String; 2]>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct IndexEntry {
+    pub page: String,
+    /// Count "N open of M": the rows whose field is not one of open_unless.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub count: Option<OpenCount>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct OpenCount {
+    pub field: String,
+    pub open_unless: Vec<String>,
+}
+
+/// How one page reads.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct Page {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intro: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group_by: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub groups: Vec<Group>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub skip_empty_groups: bool,
+    /// Fields to order the rows by; rows that tie keep their order in the file.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub order_by: Vec<String>,
+    /// What each row shows, in order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub show: Vec<Show>,
+    /// A list instead of sections.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub list: Option<ListLayout>,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct Group {
+    pub value: String,
+    pub heading: String,
+}
+
+/// One thing a row shows: a field (or several, joined), as a plain paragraph or under a label; or the
+/// row's relations; or its sources.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct Show {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fields: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub relations: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub sources: bool,
+}
+
+/// A list page: each row one line - a link, then fields after it, then who cites it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ListLayout {
+    /// [the field shown, the field linked to]
+    pub link: [String; 2],
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub after: Vec<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub cited_by: bool,
+}
+
+fn order(a: Option<&Value>, b: Option<&Value>) -> std::cmp::Ordering {
+    use std::cmp::Ordering::*;
+    match (a.filter(|v| !v.is_null()), b.filter(|v| !v.is_null())) {
+        (None, None) => Equal,
+        (None, Some(_)) => Greater,
+        (Some(_), None) => Less,
+        (Some(Value::Number(x)), Some(Value::Number(y))) => {
+            x.as_f64().partial_cmp(&y.as_f64()).unwrap_or(Equal)
+        }
+        (Some(x), Some(y)) => py_str(Some(x)).cmp(&py_str(Some(y))),
+    }
+}
+
+impl<'a> Site<'a> {
+    fn declared_page(&self, f: &dyn Format, t: &str, p: &Page) -> Vec<String> {
+        let mut lines = f.title(p.title.as_deref().unwrap_or(&title_case(&words(t))));
+        if let Some(i) = &p.intro {
+            lines.push(f.text(i));
+            lines.push(String::new());
+        }
+        let mut rows: Vec<&Row> = self.rows(t).iter().collect();
+        if !p.order_by.is_empty() {
+            rows.sort_by(|a, b| {
+                p.order_by
+                    .iter()
+                    .map(|k| order(a.get(k), b.get(k)))
+                    .find(|o| o.is_ne())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+        }
+        if let Some(list) = &p.list {
+            lines.extend(rows.iter().map(|r| self.list_line(f, r, list)));
+            return lines;
+        }
+        match &p.group_by {
+            Some(g) => {
+                for grp in &p.groups {
+                    let members: Vec<&Row> = rows
+                        .iter()
+                        .filter(|r| key(r.get(g)).as_deref() == Some(grp.value.as_str()))
+                        .copied()
+                        .collect();
+                    if members.is_empty() && p.skip_empty_groups {
+                        continue;
+                    }
+                    lines.extend(f.heading_at(&grp.heading, 2));
+                    for r in members {
+                        lines.extend(self.declared_row(f, t, p, r, true));
+                    }
+                }
+            }
+            None => {
+                for r in rows {
+                    lines.extend(self.declared_row(f, t, p, r, false));
+                }
+            }
+        }
+        lines
+    }
+
+    fn declared_row(
+        &self,
+        f: &dyn Format,
+        t: &str,
+        p: &Page,
+        rec: &Row,
+        grouped: bool,
+    ) -> Vec<String> {
+        let c = self.cols(t);
+        let label = ["name", "title", "id"].into_iter().find(|l| c.contains(l));
+        let rid = if c.contains(&"id") {
+            key(rec.get("id"))
+        } else {
+            None
+        };
+        let mut lines = Vec::new();
+        if let Some(r) = &rid {
+            lines.extend(f.anchor(r));
+        }
+        let heading = label.map(|l| py_str(rec.get(l))).unwrap_or_default();
+        lines.extend(if grouped {
+            f.heading_at(&heading, 3)
+        } else {
+            f.heading(&heading)
+        });
+        for s in &p.show {
+            if s.relations {
+                if let Some(r) = &rid {
+                    lines.extend(self.relations_in_words(f, r));
+                }
+                continue;
+            }
+            if s.sources {
+                if let Some(r) = &rid {
+                    lines.extend(self.cited_by_row(f, r));
+                }
+                continue;
+            }
+            let parts: Vec<String> = s
+                .field
+                .iter()
+                .chain(s.fields.iter())
+                .filter_map(|k| fmt(rec.get(k.as_str())))
+                .collect();
+            if parts.is_empty() {
+                continue;
+            }
+            let v = f.text(&parts.join(", "));
+            match &s.label {
+                Some(l) => lines.extend(f.field(l, &v)),
+                None => lines.extend(f.para(&v)),
+            }
+        }
+        lines
+    }
+
+    /// Relations under their words ("Serves", "Served by"), one term per kind of word; without
+    /// declared words, the generic "Relations" list.
+    fn relations_in_words(&self, f: &dyn Format, rid: &str) -> Vec<String> {
+        let Some(words) = self
+            .presentation
+            .map(|s| &s.relation_words)
+            .filter(|w| !w.is_empty())
+        else {
+            return self.relations_for(f, rid);
+        };
+        let mut parts: Vec<(String, Vec<String>)> = Vec::new();
+        let mut add =
+            |label: String, item: String| match parts.iter_mut().find(|(l, _)| *l == label) {
+                Some((_, items)) => {
+                    if !items.contains(&item) {
+                        items.push(item)
+                    }
+                }
+                None => parts.push((label, vec![item])),
+            };
+        for rt in &self.relation_tables {
+            for (end, other, side) in [("from_id", "to_id", 0), ("to_id", "from_id", 1)] {
+                for r in self
+                    .rows(rt)
+                    .iter()
+                    .filter(|r| key(r.get(end)).as_deref() == Some(rid))
+                {
+                    let kind = py_str(r.get("relation"));
+                    let label = words.get(&kind).map(|w| w[side].clone()).unwrap_or(kind);
+                    let note = key(r.get("note"))
+                        .filter(|n| !n.is_empty())
+                        .map(|n| format!(" ({n})"))
+                        .unwrap_or_default();
+                    add(
+                        label,
+                        format!("{}{note}", self.link(f, &py_str(r.get(other)))),
+                    );
+                }
+            }
+        }
+        parts
+            .into_iter()
+            .flat_map(|(l, items)| f.field(&l, &items.join(", ")))
+            .collect()
+    }
+
+    fn list_line(&self, f: &dyn Format, r: &Row, list: &ListLayout) -> String {
+        let mut s =
+            f.list_item(&f.url(&py_str(r.get(&list.link[0])), &py_str(r.get(&list.link[1]))));
+        let after: Vec<String> = list.after.iter().filter_map(|k| fmt(r.get(k))).collect();
+        if !after.is_empty() {
+            s.push_str(&format!(", {}", after.join(", ")));
+        }
+        if list.cited_by {
+            if let Some(id) = key(r.get("id")) {
+                let users = self.cites_of_source(f, &id);
+                if !users.is_empty() {
+                    s.push_str(&format!(". Cited by: {}", users.join(", ")));
+                }
+            }
+        }
+        s
+    }
+}
+
+impl<'a> Site<'a> {
+    /// The index's lines: the declared pages in their order (with "N open of M" counts where
+    /// declared), or every page with its row count.
+    fn index_lines(&self, f: &dyn Format, counts: &[(String, usize)]) -> Vec<String> {
+        let declared = self
+            .presentation
+            .map(|p| p.index.as_slice())
+            .unwrap_or_default();
+        if declared.is_empty() {
+            return counts
+                .iter()
+                .map(|(t, n)| f.index_item(&title_case(&words(t)), t, &n.to_string()))
+                .collect();
+        }
+        declared
+            .iter()
+            .filter(|e| self.page_tables.contains(&e.page))
+            .map(|e| {
+                let rows = self.rows(&e.page);
+                let n = match &e.count {
+                    Some(c) => format!(
+                        "{} open of {}",
+                        rows.iter()
+                            .filter(|r| !c
+                                .open_unless
+                                .iter()
+                                .any(|v| key(r.get(&c.field)).as_deref() == Some(v.as_str())))
+                            .count(),
+                        rows.len()
+                    ),
+                    None => rows.len().to_string(),
+                };
+                f.index_item(&title_case(&words(&e.page)), &e.page, &n)
+            })
+            .collect()
+    }
+}
+
 fn write(f: &dyn Format, docs: &Path, name: &str, lines: Vec<String>) -> Result<()> {
     std::fs::create_dir_all(docs)?;
     let mut all = vec![f.notice().to_string(), String::new()];
@@ -832,14 +1164,29 @@ pub fn render(data: &Path, d: &Declaration, docs: &Path, formats: &[String]) -> 
     for f in &fs {
         let f = f.as_ref();
         for t in &site.page_tables {
-            let lines = if site.matrix.contains_key(t) {
+            let lines = if let Some(p) = d.pages.get(t) {
+                site.declared_page(f, t, p)
+            } else if site.matrix.contains_key(t) {
                 site.matrix_page(f, t)
             } else {
                 site.table_page(f, t)
             };
             write(f, docs, t, lines)?;
         }
+        let declared_title = site.presentation.and_then(|p| p.title.as_ref());
         let mut out = match about {
+            _ if declared_title.is_some() => {
+                let mut h = f.title(declared_title.map(String::as_str).unwrap_or_default());
+                let intro = site
+                    .presentation
+                    .map(|p| p.intro.as_slice())
+                    .unwrap_or_default();
+                if !intro.is_empty() {
+                    h.extend(intro.iter().map(|l| f.text(l)));
+                    h.push(String::new());
+                }
+                h
+            }
             Some(a) => {
                 let mut h = f.title(&py_str(a.get("title")));
                 h.push(f.text(&py_str(a.get("summary"))));
@@ -848,11 +1195,7 @@ pub fn render(data: &Path, d: &Declaration, docs: &Path, formats: &[String]) -> 
             }
             None => f.title("Index"),
         };
-        out.extend(
-            counts
-                .iter()
-                .map(|(t, n)| f.index_item(&title_case(&words(t)), t, *n)),
-        );
+        out.extend(site.index_lines(f, &counts));
         out.push(String::new());
         write(f, docs, "index", out)?;
     }
@@ -895,5 +1238,51 @@ mod tests {
             "markup followed by a letter gets the empty separator"
         );
         assert_eq!(width("Ab日本"), 6);
+    }
+
+    #[test]
+    fn presentation_declared_as_data() {
+        let decl: crate::Declaration = toml::from_str(
+            r#"
+[tables.items]
+key = ["id"]
+fields = [{ name = "id", type = "string" }, { name = "name", type = "string" }, { name = "kind", type = "string" }, { name = "body", type = "string" }, { name = "who", type = "string" }, { name = "year", type = "integer" }, { name = "status", type = "string" }]
+[tables.links]
+fields = [{ name = "from_id", type = "string" }, { name = "to_id", type = "string" }, { name = "relation", type = "string" }, { name = "note", type = "string" }]
+[site]
+title = "A canon"
+intro = ["Line one.", "Line two."]
+index = [{ page = "items", count = { field = "status", open_unless = ["done"] } }]
+[site.relation_words]
+serves = ["Serves", "Served by"]
+[pages.items]
+intro = "Things."
+group_by = "kind"
+groups = [{ value = "a", heading = "Kind A" }, { value = "b", heading = "Kind B" }, { value = "c", heading = "Kind C" }]
+skip_empty_groups = true
+show = [{ field = "body" }, { fields = ["who", "year"], label = "Origin" }, { relations = true }]
+"#,
+        )
+        .unwrap();
+        let dir = std::env::temp_dir().join(format!("tad-pres-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("data")).unwrap();
+        std::fs::write(dir.join("data/items.json"), "{\"id\":\"x\",\"name\":\"X\",\"kind\":\"b\",\"body\":\"Body of x.\",\"who\":\"Ada\",\"year\":1843,\"status\":\"open\"}\n{\"id\":\"y\",\"name\":\"Y\",\"kind\":\"a\",\"body\":\"Body of y.\",\"who\":null,\"year\":null,\"status\":\"done\"}\n").unwrap();
+        std::fs::write(
+            dir.join("data/links.json"),
+            "{\"from_id\":\"x\",\"to_id\":\"y\",\"relation\":\"serves\",\"note\":\"mostly\"}\n",
+        )
+        .unwrap();
+        render(&dir.join("data"), &decl, &dir.join("docs"), &["md".into()]).unwrap();
+        let page = std::fs::read_to_string(dir.join("docs/items.md")).unwrap();
+        let want = "# Items\n\nThings.\n\n## Kind A\n\n<a id=\"y\"></a>\n### Y\n\nBody of y.\n\nServed by\n: [X](items.md#x) (mostly)\n\n## Kind B\n\n<a id=\"x\"></a>\n### X\n\nBody of x.\n\nOrigin\n: Ada, 1843\n\nServes\n: [Y](items.md#y) (mostly)\n";
+        assert!(page.ends_with(want), "{page}");
+        let index = std::fs::read_to_string(dir.join("docs/index.md")).unwrap();
+        assert!(
+            index.ends_with(
+                "# A canon\n\nLine one.\nLine two.\n\n- [Items](items.md): 1 open of 2\n"
+            ),
+            "{index}"
+        );
     }
 }
