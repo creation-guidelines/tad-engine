@@ -23,7 +23,12 @@ for r in $repos; do
 	PATH="$bin:$PATH" make canon render >/dev/null
 	rm -rf "$bin"
 	n=$(git status --porcelain | wc -l)
-	git add -A && git -c user.name="${GIT_NAME:-tad update-pins}" -c user.email="${GIT_EMAIL:-agent@creation-guidelines}" commit -qm "build: tad $latest" -m "The pin moves from $pin to $latest; the data re-canonicalized and the documents re-rendered by it ($n files changed)."
+	if grep -q '^glimpses = ' oco.toml 2>/dev/null; then
+		OCOECO_BY="${OCOECO_BY:-tad update-pins}" ocoeco glimpse "tad $latest: the pin moved, the data and documents re-rendered" --kind build >/dev/null
+		GIT_AUTHOR_NAME="${GIT_NAME:-tad update-pins}" GIT_COMMITTER_NAME="${GIT_NAME:-tad update-pins}" GIT_AUTHOR_EMAIL="${GIT_EMAIL:-agent@creation-guidelines}" GIT_COMMITTER_EMAIL="${GIT_EMAIL:-agent@creation-guidelines}" ocoeco commit >/dev/null
+	else
+		git add -A && git -c user.name="${GIT_NAME:-tad update-pins}" -c user.email="${GIT_EMAIL:-agent@creation-guidelines}" commit -qm "build: tad $latest" -m "The pin moves from $pin to $latest; the data re-canonicalized and the documents re-rendered by it ($n files changed)."
+	fi
 	if land --no-manual >/dev/null 2>&1; then echo "$r: tad $pin -> $latest, landed ($n files)"; else echo "$r: tad $latest refused by its checks; left on build/tad-$latest" >&2; failed=1; fi
 done
 exit $failed
