@@ -3,7 +3,9 @@
 **tad** keeps a small database as plain text in git, with three ways into the same data: **files** you can
 read and diff (one JSON object per line, one file per table, so a change to one row is a one-line diff),
 **text** you can reshape with jq and Miller, and **SQL** with joins (DuckDB), every change brought back to
-the same canonical files. Why, and what was weighed: the research `why-tad-exists` in this repository's data. Each repository
+the same canonical files. That is tad's whole concern: what is done with the data - pages, the observatory, anything else -
+belongs to the tools that use it (rendering still lives here until it moves to a tool of its own:
+`2026-11-12-tad-is-text-as-data`). Why, and what was weighed: the research `why-tad-exists` in this repository's data. Each repository
 declares its tables as data in `tables.toml`, and tad checks every row against it, keeps the files
 in one canonical form, edits a row only when the result still checks out, and renders the data
 into documents.
