@@ -1,6 +1,6 @@
 [package]
 name = "tad"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 description = "A transparent database of text files in git: tables declared as data, every row checked"
 license = "MIT"

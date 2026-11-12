@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.0](https://github.com/creation-guidelines/tad-engine/compare/tad-v0.4.0...tad-v0.5.0) (2026-11-12)
+
+
+### Features
+
+* tad engine: tad installs its own pinned DuckDB, fingerprint checked ([#72](https://github.com/creation-guidelines/tad-engine/issues/72)) ([49c2072](https://github.com/creation-guidelines/tad-engine/commit/49c2072fca6736622eb52eb5f1b8b48ae310a006))
+* tad sql: SQL over the declared tables, DuckDB as the adapter ([#69](https://github.com/creation-guidelines/tad-engine/issues/69)) ([52b7c77](https://github.com/creation-guidelines/tad-engine/commit/52b7c77d26edddae4a0f132f0e90973539bec87e))
+
+
+### Bug Fixes
+
+* tad sql proven equal to the Python engine; takes comments and --file ([#71](https://github.com/creation-guidelines/tad-engine/issues/71)) ([f928832](https://github.com/creation-guidelines/tad-engine/commit/f92883278e921f2a098d19f16e4ed4ac14fda626))
+
 ## [0.4.0](https://github.com/creation-guidelines/tad-engine/compare/tad-v0.3.0...tad-v0.4.0) (2026-11-11)
 
 
