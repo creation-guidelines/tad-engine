@@ -17,15 +17,110 @@ pub struct DuckDb {
     pub binary: PathBuf,
 }
 
+/// The DuckDB tad installs for itself: a pinned release, checked by fingerprint before it is trusted.
+pub const DUCKDB_VERSION: &str = "1.5.5";
+/// (this machine's architecture, DuckDB's name for it, the SHA-256 of its archive)
+const DUCKDB_ARCHIVES: [(&str, &str, &str); 2] = [
+    (
+        "x86_64",
+        "amd64",
+        "08c0ca117111fcede14239d0093792352befdc174218c344d232c13279643d05",
+    ),
+    (
+        "aarch64",
+        "arm64",
+        "02163197027a42149147364d31fa67cac82108517a4be43304a1cc226eaef07a",
+    ),
+];
+
+/// Where tad keeps what it installs for itself: TAD_HOME, else the user's data folder.
+fn home() -> PathBuf {
+    if let Some(h) = std::env::var_os("TAD_HOME").filter(|h| !h.is_empty()) {
+        return h.into();
+    }
+    if let Some(x) = std::env::var_os("XDG_DATA_HOME").filter(|x| !x.is_empty()) {
+        return PathBuf::from(x).join("tad");
+    }
+    PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".local/share/tad")
+}
+
+/// Where tad's own DuckDB lives once installed.
+pub fn engine_path() -> PathBuf {
+    home()
+        .join(format!("duckdb-{DUCKDB_VERSION}"))
+        .join("duckdb")
+}
+
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Installs DuckDB's pinned standalone binary for this machine into tad's own folder: downloaded,
+/// checked against the fingerprint recorded here, and only then unpacked.
+pub fn install_engine() -> Result<PathBuf> {
+    use sha2::{Digest, Sha256};
+    let (_, arch, fingerprint) = DUCKDB_ARCHIVES
+        .iter()
+        .find(|(machine, ..)| *machine == std::env::consts::ARCH)
+        .with_context(|| format!("no pinned DuckDB for {}", std::env::consts::ARCH))?;
+    let path = engine_path();
+    let dir = path.parent().context("tad's folder")?.to_path_buf();
+    std::fs::create_dir_all(&dir)?;
+    let archive = dir.join("duckdb.zip");
+    let url = format!("https://github.com/duckdb/duckdb/releases/download/v{DUCKDB_VERSION}/duckdb_cli-linux-{arch}.zip");
+    let run = |program: &str, args: &[&str]| -> Result<()> {
+        let ok = std::process::Command::new(program)
+            .args(args)
+            .status()
+            .with_context(|| format!("{program} is needed to install DuckDB"))?
+            .success();
+        if !ok {
+            bail!("{program} failed");
+        }
+        Ok(())
+    };
+    run("curl", &["-fsSL", "-o", &archive.to_string_lossy(), &url])?;
+    let got = hex(Sha256::digest(std::fs::read(&archive)?).as_slice());
+    if got != *fingerprint {
+        let _ = std::fs::remove_file(&archive);
+        bail!("DuckDB's download does not match its pinned fingerprint - nothing installed");
+    }
+    run(
+        "unzip",
+        &[
+            "-q",
+            "-o",
+            &archive.to_string_lossy(),
+            "-d",
+            &dir.to_string_lossy(),
+        ],
+    )?;
+    let _ = std::fs::remove_file(&archive);
+    if !path.is_file() {
+        bail!("the archive held no duckdb");
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))?;
+    }
+    Ok(path)
+}
+
 impl DuckDb {
+    /// The engine to use: the one named in TAD_DUCKDB, else tad's own, else `duckdb` on the PATH.
     pub fn find() -> Result<DuckDb> {
         if let Some(p) = std::env::var_os("TAD_DUCKDB").filter(|p| !p.is_empty()) {
             return Ok(DuckDb { binary: p.into() });
         }
+        let own = engine_path();
+        if own.is_file() {
+            return Ok(DuckDb { binary: own });
+        }
         std::env::var_os("PATH")
             .and_then(|paths| std::env::split_paths(&paths).map(|d| d.join("duckdb")).find(|p| p.is_file()))
             .map(|binary| DuckDb { binary })
-            .context("tad sql needs DuckDB's standalone binary: put `duckdb` on the PATH, or name it in TAD_DUCKDB")
+            .with_context(|| format!("tad sql needs DuckDB: run `tad engine` to install its pinned binary (v{DUCKDB_VERSION}), or name one in TAD_DUCKDB"))
     }
 }
 
@@ -387,5 +482,14 @@ fields = [{ name = "id", type = "string", required = true }, { name = "text", ty
                 .contains("\"mine\": 1"),
             "nothing was written"
         );
+    }
+
+    #[test]
+    fn the_pinned_engine_is_named_by_fingerprint() {
+        assert!(DUCKDB_ARCHIVES
+            .iter()
+            .all(|(_, _, f)| f.len() == 64 && f.chars().all(|c| c.is_ascii_hexdigit())));
+        assert_eq!(hex(&[0, 255, 16]), "00ff10");
+        assert!(engine_path().ends_with(format!("duckdb-{DUCKDB_VERSION}/duckdb")));
     }
 }

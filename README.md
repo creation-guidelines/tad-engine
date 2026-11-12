@@ -15,6 +15,8 @@ tad check                      # every row, and every rule across tables
 tad canon                      # rewrite data/ in canonical form (only when it checks out)
 tad set TABLE --key ID --set field=value ...   # add or update one row, checked; nothing kept that breaks a rule
 tad render [--format md,rst]   # data/ -> docs/: one page per table, Markdown and/or reStructuredText
+tad sql "SELECT ..." [--file F]   # ask the data in SQL (DuckDB): a query changes nothing; a change is kept only if every rule holds
+tad engine                     # install the SQL engine tad uses: DuckDB's pinned binary, checked by fingerprint
 tad declare --from-sql schema.sql   # translate a DuckDB schema into a declaration (refusing what it does not know)
 ```
 

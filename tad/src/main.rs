@@ -53,6 +53,8 @@ enum Cmd {
         #[arg(long)]
         format: Option<String>,
     },
+    /// Install the SQL engine tad uses: DuckDB's pinned binary, checked by fingerprint
+    Engine,
     /// Ask the data in SQL (DuckDB): a query changes nothing; a change is kept only if every rule still holds
     Sql {
         /// The SQL statement (it may begin with a comment), or give --file
@@ -152,6 +154,14 @@ fn main() -> Result<()> {
             println!(
                 "{}",
                 tad::render::render(&data, &declaration(&tables)?, &docs, &list)?
+            );
+        }
+        Cmd::Engine => {
+            let path = tad::sql::install_engine()?;
+            println!(
+                "DuckDB {} installed for tad at {}",
+                tad::sql::DUCKDB_VERSION,
+                path.display()
             );
         }
         Cmd::Sql {
