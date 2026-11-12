@@ -11,6 +11,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
 pub mod render;
+pub mod sql;
 
 /// One field of a table.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]

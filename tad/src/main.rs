@@ -53,6 +53,18 @@ enum Cmd {
         #[arg(long)]
         format: Option<String>,
     },
+    /// Ask the data in SQL (DuckDB): a query changes nothing; a change is kept only if every rule still holds
+    Sql {
+        /// The SQL statement
+        statement: String,
+        /// How rows are printed: box, csv, json, markdown, table or line
+        #[arg(long, default_value = "box")]
+        format: String,
+        #[arg(long, default_value = "tables.toml")]
+        tables: PathBuf,
+        #[arg(long, default_value = "data")]
+        data: PathBuf,
+    },
     /// Add or update one row, checked: a change that would break a rule is not kept
     Set {
         /// The table
@@ -137,6 +149,20 @@ fn main() -> Result<()> {
                 "{}",
                 tad::render::render(&data, &declaration(&tables)?, &docs, &list)?
             );
+        }
+        Cmd::Sql {
+            statement,
+            format,
+            tables,
+            data,
+        } => {
+            let engine = tad::sql::DuckDb::find()?;
+            let outcome =
+                tad::sql::sql(&data, &declaration(&tables)?, &statement, &engine, &format)?;
+            print!("{}", outcome.printed);
+            if !outcome.changed.is_empty() {
+                println!("changed: {}", outcome.changed.join(", "));
+            }
         }
         Cmd::Set {
             table,
