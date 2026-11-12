@@ -55,8 +55,12 @@ enum Cmd {
     },
     /// Ask the data in SQL (DuckDB): a query changes nothing; a change is kept only if every rule still holds
     Sql {
-        /// The SQL statement
-        statement: String,
+        /// The SQL statement (it may begin with a comment), or give --file
+        #[arg(allow_hyphen_values = true)]
+        statement: Option<String>,
+        /// Read the statement from a file instead
+        #[arg(long, conflicts_with = "statement")]
+        file: Option<PathBuf>,
         /// How rows are printed: box, csv, json, markdown, table or line
         #[arg(long, default_value = "box")]
         format: String,
@@ -152,10 +156,17 @@ fn main() -> Result<()> {
         }
         Cmd::Sql {
             statement,
+            file,
             format,
             tables,
             data,
         } => {
+            let statement = match (statement, file) {
+                (Some(s), None) => s,
+                (None, Some(f)) => std::fs::read_to_string(&f)
+                    .with_context(|| format!("reading {}", f.display()))?,
+                _ => bail!("give a SQL statement, or --file FILE"),
+            };
             let engine = tad::sql::DuckDb::find()?;
             let outcome =
                 tad::sql::sql(&data, &declaration(&tables)?, &statement, &engine, &format)?;
