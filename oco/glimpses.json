@@ -15,3 +15,4 @@
 {"id":"g-20261112-191522","at":"2026-11-12T19:15:22Z","by":"claude","kind":"docs","summary":"a claim corrected: the template had one child, the phone docs"}
 {"id":"g-20261116-144655","at":"2026-11-16T14:46:55Z","by":"claude","kind":"chore","summary":"a mark: the latest runs are observed, as runs - no longer gathered here"}
 {"id":"g-20261116-155458","at":"2026-11-16T15:54:58Z","by":"claude","kind":"chore","summary":"a mark: what the gatherer writes is said where it writes it - no longer named here"}
+{"id":"g-20261116-192602","at":"2026-11-16T19:26:02Z","by":"claude","kind":"chore","summary":"tad's releases are drafts until the conveyor says them, once their files are there","where":"linux-package-distribution-oco/conveyor/decisions:2026-11-16-a-release-is-said-once-its-files-are-there"}
