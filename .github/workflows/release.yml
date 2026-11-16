@@ -1,7 +1,8 @@
 # tad's releases, automated: release-please keeps a release pull request open from the conventional
 # commits (the version in tad/Cargo.toml and the changelog); merging it (land merges release pull
-# requests) tags tad-vX.Y.Z, and the package conveyor builds the binaries with signed provenance in
-# this same run - a tag made with GitHub's own token cannot start another workflow.
+# requests) tags tad-vX.Y.Z with a draft release, not yet said, and the package conveyor builds the
+# binaries with signed provenance in this same run and says the release once they are all attached - a
+# tag made with GitHub's own token cannot start another workflow.
 name: release
 on:
   push:
@@ -19,7 +20,7 @@ jobs:
       tag: ${{ steps.rp.outputs['tad--tag_name'] }}
     steps:
       - id: rp
-        uses: googleapis/release-please-action@v4
+        uses: googleapis/release-please-action@v5
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
