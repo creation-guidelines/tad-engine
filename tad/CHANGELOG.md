@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/creation-guidelines/tad-engine/compare/tad-v0.7.0...tad-v0.7.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* the table's one-field key names its rows to references (doc) ([#91](https://github.com/creation-guidelines/tad-engine/issues/91)) ([326eb0f](https://github.com/creation-guidelines/tad-engine/commit/326eb0f3d46626a9f9f5256b76d2d4369c8d2b6f))
+
 ## [0.7.0](https://github.com/creation-guidelines/tad-engine/compare/tad-v0.6.0...tad-v0.7.0) (2026-11-17)
 
 
