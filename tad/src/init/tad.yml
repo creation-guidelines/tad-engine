@@ -1,0 +1,24 @@
+# This database holds, as tad (creation-guidelines/tad-engine) checks it: every row and every rule, the
+# files in canonical form, and the pages what the data renders to. tad comes from its pinned release
+# (bin/install-tad.sh: the version there is the pin), its checksum checked.
+name: tad
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: tad, from its pinned release
+        run: TAD_DEST="$HOME/.local/bin" ./bin/install-tad.sh && echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: every row and every rule
+        run: tad check
+      - name: canonical, and the pages fresh
+        run: |
+          tad canon && tad render
+          git add --intent-to-add . && git diff --exit-code --stat || {
+            echo "data/ or docs/ is not what tad writes: run tad canon && tad render, and commit"; exit 1; }

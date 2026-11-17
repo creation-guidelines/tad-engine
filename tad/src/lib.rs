@@ -10,6 +10,7 @@ use serde_json::Value;
 use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
+pub mod init;
 pub mod render;
 pub mod sql;
 pub mod statements;
