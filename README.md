@@ -1,5 +1,10 @@
 # tad
 
+**tad is an open, transparent, easily accessible database.** Open: plain text in git, under a free licence,
+readable and changeable by anyone with an editor, nothing hidden in a binary store. Transparent: every row is
+checked against tables declared as data, every change is a reviewable one-line diff. Easily accessible: no
+server to run, no schema migration to learn - one small program, and the data opens in any tool.
+
 **tad** keeps a small database as plain text in git, with three ways into the same data: **files** you can
 read and diff (one JSON object per line, one file per table, so a change to one row is a one-line diff),
 **text** you can reshape with jq and Miller, and **SQL** with joins (DuckDB), every change brought back to

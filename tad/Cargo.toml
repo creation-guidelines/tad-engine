@@ -2,7 +2,7 @@
 name = "tad"
 version = "0.6.0"
 edition = "2021"
-description = "A transparent database of text files in git: tables declared as data, every row checked"
+description = "An open, transparent, easily accessible database: text files in git, tables declared as data, every row checked"
 license = "MIT"
 
 [[bin]]
@@ -24,7 +24,7 @@ unicode-width = "0.2"
 
 [package.metadata.deb]
 maintainer = "creation-guidelines <agent@creation-guidelines>"
-extended-description = "A transparent database of text files in git: tables declared as data, every row checked, canonical form, checked edits, documents rendered from data."
+extended-description = "An open, transparent, easily accessible database: text files in git, tables declared as data, every row checked, canonical form, checked edits, documents rendered from data."
 assets = [
     ["target/release/tad", "usr/bin/", "755"],
     ["generated/tad.bash", "usr/share/bash-completion/completions/tad", "644"],
