@@ -159,11 +159,7 @@ fn name_field<'a>(tables: &'a BTreeMap<String, Table>, table: &str) -> &'a str {
 }
 
 /// The rules across tables, checked against the rows in `dir`; `tables` says how each names its rows.
-pub fn check_rules(
-    dir: &Path,
-    tables: &BTreeMap<String, Table>,
-    r: &Rules,
-) -> Result<Vec<String>> {
+pub fn check_rules(dir: &Path, tables: &BTreeMap<String, Table>, r: &Rules) -> Result<Vec<String>> {
     let mut problems = Vec::new();
     let ids = |to: &[String]| -> HashSet<String> {
         to.iter()
@@ -1011,7 +1007,6 @@ kinds = ["pairs-with"]
         assert_eq!(p.lines().count(), 4, "{p}");
     }
 
-
     #[test]
     fn a_reference_names_a_row_by_the_one_field_of_its_key() {
         let dir = std::env::temp_dir().join(format!("tad-refkey-{}", std::process::id()));
@@ -1019,7 +1014,10 @@ kinds = ["pairs-with"]
         std::fs::create_dir_all(&dir).unwrap();
         let w = |t: &str, s: &str| std::fs::write(dir.join(format!("{t}.json")), s).unwrap();
         w("backlog", "{\"id\":\"x\"}\n");
-        w("parts", "{\"component\":\"audio-mic\"}\n{\"component\":\"x\"}\n");
+        w(
+            "parts",
+            "{\"component\":\"audio-mic\"}\n{\"component\":\"x\"}\n",
+        );
         w(
             "notes",
             "{\"about\":\"audio-mic\"}\n{\"about\":\"x\"}\n{\"about\":\"nothing\"}\n",
@@ -1047,7 +1045,10 @@ to = ["backlog", "parts"]
             p.contains("about 'nothing' names nothing in backlog or parts"),
             "{p}"
         );
-        assert!(!p.contains("'audio-mic'"), "a part is named by its key: {p}");
+        assert!(
+            !p.contains("'audio-mic'"),
+            "a part is named by its key: {p}"
+        );
         assert!(
             p.contains("the id 'x' is used more than once, in: backlog, parts"),
             "{p}"
