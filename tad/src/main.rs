@@ -9,7 +9,7 @@ mod contract;
 use contract::{Command, Contract};
 
 const ABOUT: &str =
-    "A transparent database of text files in git: tables declared as data, every row checked";
+    "An open, transparent, easily accessible database: text files in git, tables declared as data, every row checked";
 
 fn declaration(path: &Path) -> Result<tad::Declaration> {
     Ok(toml::from_str(
