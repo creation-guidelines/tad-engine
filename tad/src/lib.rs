@@ -40,7 +40,7 @@ fn is_false(b: &bool) -> bool {
     !*b
 }
 
-/// One table: its fields, its key, and pairs of fields that must differ in every row.
+/// One table: its fields, its key (a one-field key also names a row to the references that point at it), and pairs of fields that must differ in every row.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct Table {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
