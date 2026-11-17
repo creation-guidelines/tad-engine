@@ -65,7 +65,7 @@ pub struct UniqueIds {
     pub tables: Vec<String>,
 }
 
-/// `field` ("table.field") names a row of one of `to` (by id); an empty value names nothing and passes.
+/// `field` ("table.field") names a row of one of `to` (by its key when that is one field, else by id); an empty value names nothing and passes.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct Reference {
     pub field: String,
@@ -150,21 +150,37 @@ fn split_field(f: &str) -> Result<(&str, &str)> {
         .with_context(|| format!("'{f}' should be table.field"))
 }
 
-/// The rules across tables, checked against the rows in `dir`.
-pub fn check_rules(dir: &Path, r: &Rules) -> Result<Vec<String>> {
+/// The field that names a row of `table`: its declared key when that is one field, else `id`.
+fn name_field<'a>(tables: &'a BTreeMap<String, Table>, table: &str) -> &'a str {
+    match tables.get(table).map(|t| t.key.as_slice()) {
+        Some([one]) => one,
+        _ => "id",
+    }
+}
+
+/// The rules across tables, checked against the rows in `dir`; `tables` says how each names its rows.
+pub fn check_rules(
+    dir: &Path,
+    tables: &BTreeMap<String, Table>,
+    r: &Rules,
+) -> Result<Vec<String>> {
     let mut problems = Vec::new();
-    let ids = |tables: &[String]| -> HashSet<String> {
-        tables
-            .iter()
-            .flat_map(|t| rows_of(dir, t))
-            .filter_map(|m| text(m.get("id")))
+    let ids = |to: &[String]| -> HashSet<String> {
+        to.iter()
+            .flat_map(|t| {
+                let f = name_field(tables, t);
+                rows_of(dir, t)
+                    .into_iter()
+                    .filter_map(move |m| text(m.get(f)))
+            })
             .collect()
     };
     for u in &r.unique_ids {
         let mut seen: BTreeMap<String, Vec<&str>> = BTreeMap::new();
         for t in &u.tables {
+            let f = name_field(tables, t);
             for m in rows_of(dir, t) {
-                if let Some(id) = text(m.get("id")) {
+                if let Some(id) = text(m.get(f)) {
                     seen.entry(id).or_default().push(t);
                 }
             }
@@ -196,8 +212,9 @@ pub fn check_rules(dir: &Path, r: &Rules) -> Result<Vec<String>> {
             .iter()
             .filter_map(|m| text(m.get(field)))
             .collect();
+        let f = name_field(tables, &a.table);
         for m in rows_of(dir, &a.table) {
-            if let Some(id) = text(m.get("id")) {
+            if let Some(id) = text(m.get(f)) {
                 if !found.contains(&id) {
                     problems.push(format!(
                         "{}: '{id}' appears nowhere in {}",
@@ -517,7 +534,7 @@ pub fn check(dir: &Path, d: &Declaration) -> Result<(usize, Vec<String>)> {
             }
         }
     }
-    problems.extend(check_rules(dir, &d.rules)?);
+    problems.extend(check_rules(dir, &d.tables, &d.rules)?);
     Ok((rows, problems))
 }
 
@@ -974,7 +991,7 @@ kinds = ["pairs-with"]
 "#,
         )
         .unwrap();
-        let p = check_rules(&dir, &r).unwrap().join("\n");
+        let p = check_rules(&dir, &BTreeMap::new(), &r).unwrap().join("\n");
         assert!(
             p.contains("the id 'mic' is used more than once, in: devices, components"),
             "{p}"
@@ -994,6 +1011,49 @@ kinds = ["pairs-with"]
         assert_eq!(p.lines().count(), 4, "{p}");
     }
 
+
+    #[test]
+    fn a_reference_names_a_row_by_the_one_field_of_its_key() {
+        let dir = std::env::temp_dir().join(format!("tad-refkey-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let w = |t: &str, s: &str| std::fs::write(dir.join(format!("{t}.json")), s).unwrap();
+        w("backlog", "{\"id\":\"x\"}\n");
+        w("parts", "{\"component\":\"audio-mic\"}\n{\"component\":\"x\"}\n");
+        w(
+            "notes",
+            "{\"about\":\"audio-mic\"}\n{\"about\":\"x\"}\n{\"about\":\"nothing\"}\n",
+        );
+        let mut tables = BTreeMap::new();
+        tables.insert(
+            "parts".to_string(),
+            Table {
+                key: vec!["component".to_string()],
+                ..Default::default()
+            },
+        );
+        let r: Rules = toml::from_str(
+            r#"
+[[unique_ids]]
+tables = ["backlog", "parts"]
+[[references]]
+field = "notes.about"
+to = ["backlog", "parts"]
+"#,
+        )
+        .unwrap();
+        let p = check_rules(&dir, &tables, &r).unwrap().join("\n");
+        assert!(
+            p.contains("about 'nothing' names nothing in backlog or parts"),
+            "{p}"
+        );
+        assert!(!p.contains("'audio-mic'"), "a part is named by its key: {p}");
+        assert!(
+            p.contains("the id 'x' is used more than once, in: backlog, parts"),
+            "{p}"
+        );
+        assert_eq!(p.lines().count(), 2, "{p}");
+    }
     #[test]
     fn canon_writes_declared_order_with_nulls_and_set_checks_before_it_keeps() {
         let d = from_sql(SCHEMA).unwrap();
