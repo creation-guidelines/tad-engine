@@ -20,7 +20,8 @@ for r in $repos; do
 	sed -i "s/^version=\"\${TAD_VERSION:-$pin}\"\$/version=\"\${TAD_VERSION:-$latest}\"/" bin/install-tad.sh
 	grep -q "TAD_VERSION:-$latest}" bin/install-tad.sh || { echo "$r: the pin did not move" >&2; failed=1; continue; }
 	bin=$(mktemp -d); TAD_DEST="$bin" TAD_VERSION="$latest" ./bin/install-tad.sh >/dev/null
-	PATH="$bin:$PATH" make canon render >/dev/null
+	# a base started by tad init has no Makefile: tad itself canonicalizes and renders
+	if [ -f Makefile ]; then PATH="$bin:$PATH" make canon render >/dev/null; else "$bin/tad" canon >/dev/null && "$bin/tad" render >/dev/null; fi
 	rm -rf "$bin"
 	n=$(git status --porcelain | wc -l)
 	if grep -q '^glimpses = ' oco.toml 2>/dev/null; then
