@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/creation-guidelines/tad-engine/compare/tad-v0.5.0...tad-v0.6.0) (2026-11-17)
+
+
+### Features
+
+* named statements run by name with typed parameters; a command line declared with argenv ([#82](https://github.com/creation-guidelines/tad-engine/issues/82)) ([dca53ce](https://github.com/creation-guidelines/tad-engine/commit/dca53ceb978afadefaa726a7aeb814366f6e19d2))
+
 ## [0.5.0](https://github.com/creation-guidelines/tad-engine/compare/tad-v0.4.0...tad-v0.5.0) (2026-11-12)
 
 
