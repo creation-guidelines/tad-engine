@@ -76,7 +76,7 @@ and `maximum`. A table may also say which pairs of fields must differ (`distinct
 given field requires (`requires`). A table may allow fields it does not name (`extra_fields = true`, for a shared minimum that
 projects extend) and name the field a new row is dated by (`dated`, filled with today by `tad set`). Rules across tables: `unique_ids` (ids unique across tables),
 `references` (a field names a row of other tables), `appears_in` (every row is cited somewhere) and
-`no_mirror` (a symmetric relation is not recorded both ways).
+`no_mirror` (a symmetric relation is not recorded both ways). A row is named by the table's key when that is one field, else by `id`.
 
 ## Rendering
 
