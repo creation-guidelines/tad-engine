@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/creation-guidelines/tad-engine/compare/tad-v0.6.0...tad-v0.7.0) (2026-11-17)
+
+
+### Features
+
+* tad init starts a bare database: declaration, data/, the pinned release, the CI check ([#85](https://github.com/creation-guidelines/tad-engine/issues/85)) ([c4b0dd8](https://github.com/creation-guidelines/tad-engine/commit/c4b0dd86c94d810832fdb378a898cb48855b7c6e))
+
 ## [0.6.0](https://github.com/creation-guidelines/tad-engine/compare/tad-v0.5.0...tad-v0.6.0) (2026-11-17)
 
 
