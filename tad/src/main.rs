@@ -201,6 +201,15 @@ fn run() -> Result<()> {
     };
 
     match command {
+        Command::Init => {
+            let dir = PathBuf::from(get(&Contract::DIR).context("init needs a DIR (. for here)")?);
+            let written = tad::init::init(&dir, env!("CARGO_PKG_VERSION"))?;
+            println!(
+                "a bare database in {}: {}\nnext: declare its tables in tables.toml; after each change tad canon && tad render; commit it all",
+                dir.display(),
+                written.join(", ")
+            );
+        }
         Command::Declare => {
             let from = get(&Contract::FROM_SQL).context("declare needs --from-sql FILE")?;
             let sql = std::fs::read_to_string(&from).with_context(|| format!("reading {from}"))?;

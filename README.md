@@ -16,6 +16,7 @@ in one canonical form, edits a row only when the result still checks out, and re
 into documents.
 
 ```
+tad init DIR                   # start a bare database: tables.toml, data/, tad pinned to this release, the check CI runs
 tad check                      # every row, and every rule across tables
 tad canon                      # rewrite data/ in canonical form (only when it checks out)
 tad set TABLE --key ID --set field=value ...   # add or update one row, checked; nothing kept that breaks a rule
@@ -28,6 +29,18 @@ tad completions bash|zsh|fish|nushell; tad man   # derived from the command line
 tad engine                     # install the SQL engine tad uses: DuckDB's pinned binary, checked by fingerprint
 tad declare --from-sql schema.sql   # translate a DuckDB schema into a declaration (refusing what it does not know)
 ```
+
+## Starting a database
+
+`tad init DIR` (`.` for here) starts a bare database and nothing of a domain: `tables.toml` with no table
+yet, `data/`, `bin/install-tad.sh` pinning the release of tad that started it (the download checked
+against the release's checksums), `.github/workflows/tad.yml` - the check CI runs: every row and rule
+hold, the files are canonical and the pages what the data renders to - and the pages of the empty
+declaration, so that check holds from the first commit. Where any of these files is there already it
+writes nothing. A knowledge base - standing tables for decisions, research and work, the about link, the
+named queries an agent answers by - is grown on top of it by
+[ideal-knowledge-base](https://github.com/grenudi/ideal-knowledge-base), which pins tad as tad's own
+consumers do. This took the place of text-as-data-template's scaffold (decision `2026-11-17-tad-init`).
 
 ## Named statements
 

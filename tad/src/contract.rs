@@ -13,6 +13,7 @@ pub enum Command {
     Sql,
     Query,
     Record,
+    Init,
     Statements,
     Render,
     Engine,
@@ -23,6 +24,7 @@ pub enum Command {
 
 impl Command {
     pub const ALL: &'static [Command] = &[
+        Command::Init,
         Command::Check,
         Command::Canon,
         Command::Set,
@@ -40,6 +42,7 @@ impl Command {
     /// How it is typed.
     pub const fn token(self) -> &'static str {
         match self {
+            Command::Init => "init",
             Command::Check => "check",
             Command::Canon => "canon",
             Command::Set => "set",
@@ -58,6 +61,7 @@ impl Command {
     /// One line for the help and the man page.
     pub const fn summary(self) -> &'static str {
         match self {
+            Command::Init => "Start a bare database in DIR: the declaration, data/, tad pinned to this release, and the check CI runs (nothing is written where one is there)",
             Command::Check => "Check every row of every declared table, and the rules across tables",
             Command::Canon => "Rewrite every table in canonical form, only when the data checks out",
             Command::Set => "Add or update one row, checked: set TABLE --key K --set FIELD=VALUE ... (a change that would break a rule is not kept)",
@@ -224,6 +228,17 @@ contract! {
         subcommands: &[Command::Completions],
         arg:         Some(Arg { value_name: "SHELL", ..Arg::positional(0) }),
         summary:     "The shell to print completions for; statement names are asked of tad as they are completed",
+        ..Input::EMPTY
+    };
+
+    /// Where a database is started.
+    DIR: String, Command = Input {
+        key:         "dir",
+        ty:          Type::Path,
+        required:    true,
+        subcommands: &[Command::Init],
+        arg:         Some(Arg { value_name: "DIR", ..Arg::positional(0) }),
+        summary:     "The folder the database is started in (. for here); it is made if it is not there",
         ..Input::EMPTY
     };
 

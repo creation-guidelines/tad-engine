@@ -1,0 +1,5 @@
+# The tables of this database, declared as data: the authority on what data/ may hold, checked by tad
+# (https://github.com/creation-guidelines/tad-engine) on every change. Declare each table as [tables.NAME]
+# with its key and its [[tables.NAME.fields]]; tad declare --from-sql FILE translates a schema written in
+# SQL. Named statements are kept beside this file: queries/NAME.sql read, records/NAME.sql write.
+[tables]
