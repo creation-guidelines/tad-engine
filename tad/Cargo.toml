@@ -12,7 +12,8 @@ path = "src/main.rs"
 [dependencies]
 sha2 = "0.10"
 anyhow = "1"
-clap = { version = "4", features = ["derive"] }
+argenv = "0.4"
+argenv-resolve = "0.4"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -24,7 +25,21 @@ unicode-width = "0.2"
 [package.metadata.deb]
 maintainer = "creation-guidelines <agent@creation-guidelines>"
 extended-description = "A transparent database of text files in git: tables declared as data, every row checked, canonical form, checked edits, documents rendered from data."
-assets = [["target/release/tad", "usr/bin/", "755"]]
+assets = [
+    ["target/release/tad", "usr/bin/", "755"],
+    ["generated/tad.bash", "usr/share/bash-completion/completions/tad", "644"],
+    ["generated/_tad", "usr/share/zsh/site-functions/_tad", "644"],
+    ["generated/tad.fish", "usr/share/fish/vendor_completions.d/tad.fish", "644"],
+    ["generated/tad.nu", "usr/share/nushell/vendor/autoload/tad.nu", "644"],
+    ["generated/tad.1.gz", "usr/share/man/man1/tad.1.gz", "644"],
+]
 
 [package.metadata.generate-rpm]
-assets = [{ source = "target/release/tad", dest = "/usr/bin/tad", mode = "755" }]
+assets = [
+    { source = "target/release/tad", dest = "/usr/bin/tad", mode = "755" },
+    { source = "generated/tad.bash", dest = "/usr/share/bash-completion/completions/tad", mode = "644" },
+    { source = "generated/_tad", dest = "/usr/share/zsh/site-functions/_tad", mode = "644" },
+    { source = "generated/tad.fish", dest = "/usr/share/fish/vendor_completions.d/tad.fish", mode = "644" },
+    { source = "generated/tad.nu", dest = "/usr/share/nushell/vendor/autoload/tad.nu", mode = "644" },
+    { source = "generated/tad.1.gz", dest = "/usr/share/man/man1/tad.1.gz", mode = "644" },
+]

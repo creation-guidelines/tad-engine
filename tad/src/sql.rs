@@ -252,6 +252,29 @@ pub fn sql(
     engine: &dyn SqlEngine,
     format: &str,
 ) -> Result<Outcome> {
+    run(dir, d, statement, engine, format, true)
+}
+
+/// Runs a query: as [`sql`], but a statement that would change any table changes nothing and is refused
+/// - what writes is a record.
+pub fn query(
+    dir: &Path,
+    d: &Declaration,
+    statement: &str,
+    engine: &dyn SqlEngine,
+    format: &str,
+) -> Result<Outcome> {
+    run(dir, d, statement, engine, format, false)
+}
+
+fn run(
+    dir: &Path,
+    d: &Declaration,
+    statement: &str,
+    engine: &dyn SqlEngine,
+    format: &str,
+    may_change: bool,
+) -> Result<Outcome> {
     let statement = statement.trim().trim_end_matches(';');
     if statement.is_empty() {
         bail!("give a SQL statement");
@@ -273,12 +296,18 @@ pub fn sql(
         ));
     }
     let printed = engine.run(&script, format);
-    let result = printed.and_then(|printed| keep(dir, d, &scratch, printed));
+    let result = printed.and_then(|printed| keep(dir, d, &scratch, printed, may_change));
     let _ = std::fs::remove_dir_all(&scratch);
     result
 }
 
-fn keep(dir: &Path, d: &Declaration, scratch: &Path, printed: String) -> Result<Outcome> {
+fn keep(
+    dir: &Path,
+    d: &Declaration,
+    scratch: &Path,
+    printed: String,
+    may_change: bool,
+) -> Result<Outcome> {
     let mut changes: Vec<(String, PathBuf, String, String)> = Vec::new();
     for (table, t) in &d.tables {
         let file = dir.join(format!("{table}.json"));
@@ -295,6 +324,13 @@ fn keep(dir: &Path, d: &Declaration, scratch: &Path, printed: String) -> Result<
             bail!("nothing changed - {table} may carry fields the declaration does not name, which SQL would drop: change it with tad set");
         }
         changes.push((table.clone(), file, old, new));
+    }
+    if !may_change && !changes.is_empty() {
+        let names: Vec<&str> = changes.iter().map(|(t, ..)| t.as_str()).collect();
+        bail!(
+            "nothing changed - a query reads, and this one would change {}: what writes is a record (records/)",
+            names.join(", ")
+        );
     }
     for (_, file, _, new) in &changes {
         std::fs::write(file, new).with_context(|| format!("writing {}", file.display()))?;
@@ -456,6 +492,31 @@ fields = [{ name = "id", type = "string", required = true }, { name = "text", ty
                 .unwrap()
                 .contains("\"done\""),
             "a refused change leaves the file as it was"
+        );
+    }
+
+    #[test]
+    fn a_query_that_would_change_a_table_changes_nothing() {
+        let (dir, d) = data();
+        let writes = StandIn(
+            [
+                (
+                    "items",
+                    "{\"id\":\"a\",\"status\":\"done\",\"size\":5.0,\"when\":\"2026-11-12\"}\n",
+                ),
+                ("notes", "{\"id\":\"n\",\"text\":\"kept as written\"}\n"),
+            ]
+            .into(),
+        );
+        let e = query(&dir, &d, "UPDATE items SET status = 'done'", &writes, "csv")
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("a query reads") && e.contains("items"), "{e}");
+        assert!(
+            std::fs::read_to_string(dir.join("items.json"))
+                .unwrap()
+                .contains("\"open\""),
+            "nothing was written"
         );
     }
 

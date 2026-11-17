@@ -16,9 +16,38 @@ tad canon                      # rewrite data/ in canonical form (only when it c
 tad set TABLE --key ID --set field=value ...   # add or update one row, checked; nothing kept that breaks a rule
 tad render [--format md,rst]   # data/ -> docs/: one page per table, Markdown and/or reStructuredText
 tad sql "SELECT ..." [--file F]   # ask the data in SQL (DuckDB): a query changes nothing; a change is kept only if every rule holds
+tad query NAME --PARAM V ...    # (tad q) run queries/NAME.sql: a named query; it reads, and changes nothing
+tad record NAME --PARAM V ...   # (tad r) run records/NAME.sql: a named record; kept only if every rule holds
+tad statements [queries|records]   # the named statements this place keeps, with their parameters
+tad completions bash|zsh|fish|nushell; tad man   # derived from the command line's contract (argenv)
 tad engine                     # install the SQL engine tad uses: DuckDB's pinned binary, checked by fingerprint
 tad declare --from-sql schema.sql   # translate a DuckDB schema into a declaration (refusing what it does not know)
 ```
+
+## Named statements
+
+What a place asks of its data, and how it writes it, is kept as SQL files beside `tables.toml`:
+`queries/NAME.sql` read and change nothing (one that would change a table is refused); `records/NAME.sql`
+write, and what they write is kept only if every row and rule still checks out, as with `tad sql`. The
+leading comment is the statement's header: its first line says what it does, and each line beginning
+`--NAME` declares a parameter as it is given on the command line, with its type (the declaration's
+types), `?` when it may be left out (null), or `= DEFAULT` (`today` for a date):
+
+```sql
+-- A decision, with what was rejected.
+-- --project   string        the place it is of
+-- --decision  string
+-- --rejected  string?
+-- --date      date = today
+INSERT INTO decisions (id, project, date, decision, rejected)
+VALUES ($date || '-' || $project, $project, $date, $decision, $rejected);
+```
+
+`tad r decision --project lab-tools --decision "..."` runs it. In the body `$NAME` (`$run_at` for
+`--run-at`) is written by tad as a literal of its type - a value that is not of its type is refused,
+and a string can never close its quotes - and never inside quoted text or a comment. A new statement is
+a file in the same change as the work that needs it: tad is not released for it. The shell completions
+ask tad for the names as they complete them (`tad statements queries`), so they are always the place's own.
 
 ## The declaration
 
