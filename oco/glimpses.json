@@ -24,3 +24,4 @@
 {"id":"g-20261117-194347","at":"2026-11-17T19:43:47Z","by":"tad-ref-by-key","kind":"docs","summary":"tad resolves a reference by the target table's key, so a part can be named"}
 {"id":"g-20261117-195133","at":"2026-11-17T19:51:33Z","by":"tad-ref-by-key","kind":"docs","summary":"fix: a reference names a row by the table's one-field key, else id"}
 {"id":"g-20261117-195304","at":"2026-11-17T19:53:04Z","by":"tad-ref-by-key","kind":"docs","summary":"fix: the table's one-field key names its rows to references (doc)"}
+{"id":"g-20261118-145321","at":"2026-11-18T14:53:21Z","by":"orchestration.a682c2","kind":"chore","summary":"tad's pin job follows linux-phone-oco's device-template and device bases"}
